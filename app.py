@@ -642,4 +642,4 @@ with tab2:
                     else:
                         st.error("피드백 삭제 중 오류가 발생했습니다.")
         
-        st.info("💡 백업 파일은 현재 디렉토리에 'feedback_backup_YYYYMMDD_HHMMSS.json' 형식으로 저장됩니다.")
+        st.info("💡 백업 파일은 'backups/' 폴더에 'feedback_backup_YYYYMMDD_HHMMSS.json' 형식으로 저장됩니다.")

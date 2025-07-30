@@ -295,10 +295,14 @@ class FeedbackManager:
     def backup_feedback(self, backup_path: str = None) -> bool:
         """피드백 데이터 백업"""
         if backup_path is None:
+            # backups 폴더 생성
+            backup_dir = Path("backups")
+            backup_dir.mkdir(exist_ok=True)
+            
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            backup_path = f"feedback_backup_{timestamp}.json"
+            backup_path = backup_dir / f"feedback_backup_{timestamp}.json"
         
-        return self.export_feedback_data(backup_path)
+        return self.export_feedback_data(str(backup_path))
     
     def clear_all_feedback(self, create_backup: bool = True) -> bool:
         """모든 피드백 데이터 삭제"""
