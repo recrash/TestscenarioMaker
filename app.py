@@ -312,12 +312,20 @@ with tab1:
         with result_placeholder.container():
             st.success("테스트 시나리오 생성이 완료되었습니다!")
 
-            with open(final_filename, "rb") as file:
+            # 파일 데이터를 세션 상태에 저장하여 재읽기 방지
+            if 'file_data' not in st.session_state and final_filename and os.path.exists(final_filename):
+                with open(final_filename, "rb") as file:
+                    st.session_state['file_data'] = file.read()
+                    st.session_state['file_name'] = os.path.basename(final_filename)
+            
+            # 세션 상태에서 파일 데이터 사용
+            if 'file_data' in st.session_state:
                 st.download_button(
                     label="엑셀 파일 다운로드 📥",
-                    data=file,
-                    file_name=os.path.basename(final_filename),
-                    mime="application/vnd.ms-excel"
+                    data=st.session_state['file_data'],
+                    file_name=st.session_state['file_name'],
+                    mime="application/vnd.ms-excel",
+                    key="download_button"
                 )
 
             st.subheader("📊 생성 결과 미리보기")
@@ -424,12 +432,20 @@ with tab1:
                         
                         final_filename = save_results_to_excel(result_json)
                         
+                        # 파일 데이터를 세션 상태에 저장
+                        if final_filename and os.path.exists(final_filename):
+                            with open(final_filename, "rb") as file:
+                                file_data = file.read()
+                                file_name = os.path.basename(final_filename)
+                        
                         # 세션 상태에 결과 저장
                         st.session_state['generated'] = True
                         st.session_state['result_json'] = result_json
                         st.session_state['final_filename'] = final_filename
                         st.session_state['git_analysis'] = git_analysis
                         st.session_state['repo_path'] = repo_path
+                        st.session_state['file_data'] = file_data
+                        st.session_state['file_name'] = file_name
                         
                         status.update(label="생성 완료!", state="complete", expanded=False)
                         st.write("🐛 DEBUG: 세션 상태 저장 완료")
