@@ -306,68 +306,7 @@ with tab1:
         help="프롬프트 크기를 제한하여 LLM 응답 속도를 향상시킵니다."
     )
 
-    # ------ 생성된 결과가 있으면 표시 ------
-    if st.session_state.generated:                
-        # 세션 상태에서 값 불러오기
-        result_json = st.session_state.result_json
-        final_filename = st.session_state.final_filename
-        git_analysis = st.session_state.git_analysis
-        repo_path = st.session_state.repo_path
-        
-        st.success("테스트 시나리오 생성이 완료되었습니다!")
 
-        # 파일 데이터를 세션 상태에 저장하여 재읽기 방지
-        if st.session_state.file_data is None and final_filename and os.path.exists(final_filename):
-            with open(final_filename, "rb") as file:
-                st.session_state.file_data = file.read()
-                st.session_state.file_name = os.path.basename(final_filename)
-        
-        # 세션 상태에서 파일 데이터 사용
-        if st.session_state.file_data is not None:
-            st.download_button(
-                label="엑셀 파일 다운로드 📥",
-                data=st.session_state.file_data,
-                file_name=st.session_state.file_name,
-                mime="application/vnd.ms-excel",
-                key="download_button"
-            )
-
-        st.subheader("📊 생성 결과 미리보기")
-        st.write(f"**개요:** {result_json.get('Scenario Description', '')}")
-        st.write(f"**제목:** {result_json.get('Test Scenario Name', '')}")
-        
-        # Test Cases 데이터 전처리 - \n을 실제 개행으로 변환
-        test_cases = result_json.get('Test Cases', [])
-        processed_cases = []
-        
-        for case in test_cases:
-            processed_case = {}
-            for key, value in case.items():
-                if isinstance(value, str):
-                    # \n을 실제 개행으로 변환
-                    processed_case[key] = value.replace('\\n', '\n')
-                else:
-                    processed_case[key] = value
-            processed_cases.append(processed_case)
-        
-        st.dataframe(processed_cases, use_container_width=True)
-
-        # 피드백 수집 섹션
-        st.subheader("📝 시나리오 평가 및 피드백")
-        st.info("생성된 시나리오에 대한 평가를 남겨주시면 향후 더 나은 시나리오 생성에 도움이 됩니다.")
-
-        st.write("**이 시나리오가 도움이 되었나요?**")
-        col1, col2, _ = st.columns([1, 1, 8])
-
-        with col1:
-            if st.button("👍 좋아요", key="real_like_btn", help="이 시나리오가 유용했습니다", use_container_width=True):
-                st.session_state.real_modal_visible = True
-                st.session_state.real_modal_type = 'like'
-
-        with col2:
-            if st.button("👎 개선 필요", key="real_dislike_btn", help="이 시나리오에 개선이 필요합니다", use_container_width=True):
-                st.session_state.real_modal_visible = True
-                st.session_state.real_modal_type = 'dislike'
 
     # 생성 버튼
     if st.button("테스트 시나리오 생성하기 🚀", key="generate_btn"):
@@ -448,6 +387,69 @@ with tab1:
                         status.update(label="오류 발생!", state="error", expanded=True)
                         st.error(f"결과 처리 중 오류가 발생했습니다: {e}")
                         st.code(raw_response)
+
+    # ------ 생성된 결과가 있으면 표시 ------
+    if st.session_state.generated:                
+        # 세션 상태에서 값 불러오기
+        result_json = st.session_state.result_json
+        final_filename = st.session_state.final_filename
+        git_analysis = st.session_state.git_analysis
+        repo_path = st.session_state.repo_path
+        
+        st.success("테스트 시나리오 생성이 완료되었습니다!")
+
+        # 파일 데이터를 세션 상태에 저장하여 재읽기 방지
+        if st.session_state.file_data is None and final_filename and os.path.exists(final_filename):
+            with open(final_filename, "rb") as file:
+                st.session_state.file_data = file.read()
+                st.session_state.file_name = os.path.basename(final_filename)
+        
+        # 세션 상태에서 파일 데이터 사용
+        if st.session_state.file_data is not None:
+            st.download_button(
+                label="엑셀 파일 다운로드 📥",
+                data=st.session_state.file_data,
+                file_name=st.session_state.file_name,
+                mime="application/vnd.ms-excel",
+                key="download_button"
+            )
+
+        st.subheader("📊 생성 결과 미리보기")
+        st.write(f"**개요:** {result_json.get('Scenario Description', '')}")
+        st.write(f"**제목:** {result_json.get('Test Scenario Name', '')}")
+        
+        # Test Cases 데이터 전처리 - \n을 실제 개행으로 변환
+        test_cases = result_json.get('Test Cases', [])
+        processed_cases = []
+        
+        for case in test_cases:
+            processed_case = {}
+            for key, value in case.items():
+                if isinstance(value, str):
+                    # \n을 실제 개행으로 변환
+                    processed_case[key] = value.replace('\\n', '\n')
+                else:
+                    processed_case[key] = value
+            processed_cases.append(processed_case)
+        
+        st.dataframe(processed_cases, use_container_width=True)
+
+        # 피드백 수집 섹션
+        st.subheader("📝 시나리오 평가 및 피드백")
+        st.info("생성된 시나리오에 대한 평가를 남겨주시면 향후 더 나은 시나리오 생성에 도움이 됩니다.")
+
+        st.write("**이 시나리오가 도움이 되었나요?**")
+        col1, col2, _ = st.columns([1, 1, 8])
+
+        with col1:
+            if st.button("👍 좋아요", key="real_like_btn", help="이 시나리오가 유용했습니다", use_container_width=True):
+                st.session_state.real_modal_visible = True
+                st.session_state.real_modal_type = 'like'
+
+        with col2:
+            if st.button("👎 개선 필요", key="real_dislike_btn", help="이 시나리오에 개선이 필요합니다", use_container_width=True):
+                st.session_state.real_modal_visible = True
+                st.session_state.real_modal_type = 'dislike'
 
     # ------ 피드백 모달 표시 ------
     if st.session_state.real_modal_visible:    
