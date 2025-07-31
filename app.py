@@ -306,8 +306,6 @@ with tab1:
         help="프롬프트 크기를 제한하여 LLM 응답 속도를 향상시킵니다."
     )
 
-
-
     # 생성 버튼
     if st.button("테스트 시나리오 생성하기 🚀", key="generate_btn"):
         if not repo_path or not os.path.isdir(repo_path):
