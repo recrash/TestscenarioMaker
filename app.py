@@ -63,6 +63,7 @@ def initialize_session_state():
         st.session_state.feedback_submitted = False
     if 'feedback_show_success' not in st.session_state:
         st.session_state.feedback_show_success = False
+
     if 'rag_info' not in st.session_state:
         st.session_state.rag_info = None
 
@@ -72,6 +73,8 @@ initialize_session_state()
 # 실제 피드백 모달 함수 (전역 범위에서 정의)
 @st.dialog("피드백")
 def show_real_feedback_modal(feedback_type, git_analysis, result_json, repo_path):
+
+    
     st.write("새로 생성된 시나리오에 대한 의견을 주세요 (선택 사항)")
     
     if feedback_type == 'like':
@@ -168,15 +171,7 @@ def show_real_feedback_modal(feedback_type, git_analysis, result_json, repo_path
             st.write(f"**제출된 의견:** {feedback_text[:50]}{'...' if len(feedback_text) > 50 else ''}")
         
         # 통계 표시
-        stats = feedback_manager.get_feedback_stats()
-        st.info(f"현재까지 총 {stats['total_feedback']}개의 피드백이 수집되었습니다.")
-        
-        # 닫기 버튼
-        if st.button("닫기", key="success_close_btn", type="secondary"):
-            st.session_state.feedback_show_success = False
-            st.session_state.feedback_submitted = False
-            st.session_state.real_modal_visible = False
-            st.session_state.real_modal_type = None
+        stats = feedback_manager.get_feedback_stats()                        
     
     # 제출되지 않은 경우에만 버튼 표시
     if not st.session_state.feedback_show_success:
@@ -187,6 +182,9 @@ def show_real_feedback_modal(feedback_type, git_analysis, result_json, repo_path
             if st.button("취소", key="real_modal_cancel", use_container_width=True):
                 st.session_state.real_modal_visible = False
                 st.session_state.real_modal_type = None
+                st.session_state.feedback_submitted = False
+                st.session_state.feedback_show_success = False
+                st.rerun()
         
         with col2:
             if st.button("제출", key="real_modal_submit", type="primary", use_container_width=True):
@@ -211,6 +209,7 @@ def show_real_feedback_modal(feedback_type, git_analysis, result_json, repo_path
                 if success:
                     st.session_state.feedback_submitted = True
                     st.session_state.feedback_show_success = True
+                    st.rerun()  # 즉시 다시 렌더링하여 성공 메시지 표시
                 else:
                     st.error("피드백 저장 중 오류가 발생했습니다.")
 
@@ -441,11 +440,17 @@ with tab1:
 
         with col1:
             if st.button("👍 좋아요", key="real_like_btn", help="이 시나리오가 유용했습니다", use_container_width=True):
+                # 피드백 관련 세션 상태 초기화
+                st.session_state.feedback_submitted = False
+                st.session_state.feedback_show_success = False
                 st.session_state.real_modal_visible = True
                 st.session_state.real_modal_type = 'like'
 
         with col2:
             if st.button("👎 개선 필요", key="real_dislike_btn", help="이 시나리오에 개선이 필요합니다", use_container_width=True):
+                # 피드백 관련 세션 상태 초기화
+                st.session_state.feedback_submitted = False
+                st.session_state.feedback_show_success = False
                 st.session_state.real_modal_visible = True
                 st.session_state.real_modal_type = 'dislike'
 
