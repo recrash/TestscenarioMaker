@@ -308,3 +308,37 @@ documents/
 
 # 피드백 백업 파일들
 backups/
+
+# FastAPI + React 추가 항목
+# Node.js
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.npm
+.yarn-integrity
+
+# React build outputs
+/frontend/dist/
+/dist/
+/build/
+/coverage/
+
+# Playwright test results
+/test-results/
+/playwright-report/
+/blob-report/
+playwright/.cache/
+
+# TypeScript
+*.tsbuildinfo
+
+# Environment variables
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Package manager locks (선택적)
+# package-lock.json
+# yarn.lock

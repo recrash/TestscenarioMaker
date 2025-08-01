@@ -14,6 +14,14 @@ sentence-transformers # 한국어 임베딩 모델
 pytest          # 테스트 프레임워크
 pytest-mock     # Mock 객체 지원
 pytest-cov      # 테스트 커버리지
+httpx           # FastAPI 테스트용 HTTP 클라이언트
+pytest-asyncio  # 비동기 테스트 지원
+
+# FastAPI Backend
+fastapi         # FastAPI 웹 프레임워크
+uvicorn[standard] # ASGI 서버
+python-multipart # 파일 업로드 지원
+websockets      # WebSocket 지원
 
 # Optional (commented out to reduce dependencies)
 # langchain
@@ -21,6 +29,3 @@ pytest-cov      # 테스트 커버리지
 # langchain-ollama
 # llama-index
 # faiss-cpu
-# fastapi
-# uvicorn[standard]
-# python-dotenv

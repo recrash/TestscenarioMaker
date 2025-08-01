@@ -13,8 +13,6 @@ FILE_NAME_FORMAT = "{timestamp}_테스트_시나리오_결과.xlsx"
 TIME_FORMAT = "%Y%m%d_%H%M%S"
 NEWLINE_ESCAPE = "\\n"
 NEWLINE_CHAR = "\n"
-UNIT_TEST_KEYWORD = "단위"
-INTEGRATION_TEST_KEYWORD = "통합"
 START_ROW = 11
 DATA_JSON_INDENT = 2
 
@@ -98,20 +96,6 @@ def _format_test_data(test_data: Any) -> str:
         return _convert_newlines(str(test_data))
 
 
-def _determine_test_type_flags(test_type: str) -> tuple[str, str]:
-    """
-    테스트 종류에 따라 단위/통합 테스트 플래그를 결정합니다.
-    
-    Args:
-        test_type: 테스트 종류 문자열
-    
-    Returns:
-        (단위 테스트 플래그, 통합 테스트 플래그) 튜플
-    """
-    unit_flag = 'Y' if UNIT_TEST_KEYWORD in test_type else ''
-    integration_flag = 'Y' if INTEGRATION_TEST_KEYWORD in test_type else ''
-    return unit_flag, integration_flag
-
 
 def _fill_test_cases(sheet, test_cases: List[Dict[str, Any]]) -> None:
     """
@@ -144,9 +128,9 @@ def _fill_test_cases(sheet, test_cases: List[Dict[str, Any]]) -> None:
         expected_result = _convert_newlines(scenario.get("예상결과", ""))
         sheet[f'E{current_row}'] = expected_result
         
-        # 테스트 종류 플래그
-        test_type = scenario.get("종류", "")
-        unit_flag, integration_flag = _determine_test_type_flags(test_type)
+        # Unit/Integration 테스트 플래그 (JSON에서 직접 읽기)
+        unit_flag = scenario.get("Unit", "")
+        integration_flag = scenario.get("Integration", "")
         sheet[f'F{current_row}'] = unit_flag
         sheet[f'G{current_row}'] = integration_flag
 
