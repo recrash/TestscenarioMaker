@@ -83,18 +83,36 @@ async def get_rag_status():
     """RAG 시스템 상태 조회 API"""
     
     try:
+        # 설정에서 RAG 활성화 여부 먼저 확인
+        from src.config_loader import load_config
+        config = load_config()
+        
+        if not config or not config.get('rag', {}).get('enabled', False):
+            return {
+                "status": "disabled",
+                "message": "RAG 시스템이 설정에서 비활성화되어 있습니다.",
+                "auto_activated": False,
+                "document_count": 0,
+                "embedding_model": "Unknown",
+                "chunk_size": 0
+            }
+        
         # RAG 매니저 상태 확인
         try:
             rag_manager = get_rag_manager(lazy_load=True)
             if rag_manager:
                 status = "active"
-                message = "RAG 시스템이 정상적으로 작동 중입니다."
+                message = "RAG 시스템이 서버 시작 시 자동으로 활성화되었습니다."
+                auto_activated = True
             else:
-                status = "inactive"
-                message = "RAG 시스템이 비활성화되어 있습니다."
+                # RAG가 설정에서 활성화되어 있지만 아직 로드되지 않은 경우
+                status = "ready"
+                message = "RAG 시스템이 활성화되어 있으며 필요 시 자동으로 로드됩니다."
+                auto_activated = True
         except Exception as e:
             status = "error"
             message = f"RAG 시스템 오류: {str(e)}"
+            auto_activated = False
         
         # 기본 정보 수집
         rag_info = get_rag_info()
@@ -103,6 +121,7 @@ async def get_rag_status():
         return {
             "status": status,
             "message": message,
+            "auto_activated": auto_activated,
             "document_count": chroma_info.get('count', 0),
             "embedding_model": chroma_info.get('embedding_model', 'Unknown'),
             "chunk_size": rag_info.get('chunk_size', 0)
@@ -112,9 +131,52 @@ async def get_rag_status():
         return {
             "status": "error",
             "message": f"RAG 상태 조회 중 오류가 발생했습니다: {str(e)}",
+            "auto_activated": False,
             "document_count": 0,
             "embedding_model": "Unknown",
             "chunk_size": 0
+        }
+
+@router.get("/auto-activation")
+async def get_auto_activation_status():
+    """RAG 시스템 자동 활성화 상태 조회 API"""
+    
+    try:
+        from src.config_loader import load_config
+        config = load_config()
+        
+        if not config or not config.get('rag', {}).get('enabled', False):
+            return {
+                "auto_activation_enabled": False,
+                "reason": "RAG가 설정에서 비활성화되어 있습니다.",
+                "documents_folder": config.get('documents_folder', 'documents') if config else 'documents',
+                "documents_folder_exists": False,
+                "startup_initialization": False
+            }
+        
+        documents_folder = config.get('documents_folder', 'documents')
+        documents_folder_exists = os.path.exists(documents_folder)
+        
+        # RAG 매니저가 이미 로드되었는지 확인
+        rag_manager = get_rag_manager(lazy_load=True)
+        startup_initialization = rag_manager is not None
+        
+        return {
+            "auto_activation_enabled": True,
+            "reason": "RAG 시스템이 서버 시작 시 자동으로 활성화됩니다.",
+            "documents_folder": os.path.abspath(documents_folder) if documents_folder_exists else documents_folder,
+            "documents_folder_exists": documents_folder_exists,
+            "startup_initialization": startup_initialization,
+            "background_indexing": documents_folder_exists
+        }
+        
+    except Exception as e:
+        return {
+            "auto_activation_enabled": False,
+            "reason": f"오류: {str(e)}",
+            "documents_folder": "Unknown",
+            "documents_folder_exists": False,
+            "startup_initialization": False
         }
 
 @router.get("/debug")
