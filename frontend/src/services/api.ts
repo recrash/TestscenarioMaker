@@ -42,8 +42,10 @@ export const scenarioApi = {
   // WebSocket 연결을 위한 URL 생성
   getWebSocketUrl: () => {
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
-    // 백엔드 포트 8000으로 직접 연결
-    return `${protocol}//localhost:8000/api/scenario/generate-ws`
+    const host = window.location.hostname
+    // 개발 환경에서는 백엔드 포트 8000으로 직접 연결
+    const port = process.env.NODE_ENV === 'production' ? window.location.port : '8000'
+    return `${protocol}//${host}:${port}/api/scenario/generate-ws`
   }
 }
 

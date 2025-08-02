@@ -45,12 +45,16 @@ class ConnectionManager:
         self.active_connections.append(websocket)
 
     def disconnect(self, websocket: WebSocket):
-        self.active_connections.remove(websocket)
+        if websocket in self.active_connections:
+            self.active_connections.remove(websocket)
 
     async def send_progress(self, websocket: WebSocket, progress: GenerationProgress):
         try:
-            await websocket.send_text(progress.json())
-        except:
+            # Convert to dict and then to JSON string for proper serialization
+            progress_dict = progress.model_dump()
+            await websocket.send_text(json.dumps(progress_dict))
+        except Exception as e:
+            print(f"WebSocket send error: {e}")
             self.disconnect(websocket)
 
 manager = ConnectionManager()
@@ -168,14 +172,17 @@ async def generate_scenario_ws(websocket: WebSocket):
         
         # 1. Git 분석
         await send_progress(GenerationStatus.ANALYZING_GIT, "Git 변경 내역을 분석 중입니다...", 10)
+        await asyncio.sleep(1.0)  # 사용자가 볼 수 있도록 잠시 대기
         git_analysis = get_git_analysis_text(request.repo_path)
         
         # 2. RAG 저장
         await send_progress(GenerationStatus.STORING_RAG, "분석 결과를 RAG 시스템에 저장 중입니다...", 20)
+        await asyncio.sleep(1.0)  # 사용자가 볼 수 있도록 잠시 대기
         added_chunks = add_git_analysis_to_rag(git_analysis, request.repo_path)
         
         # 3. LLM 호출
         await send_progress(GenerationStatus.CALLING_LLM, "LLM을 호출하여 시나리오를 생성 중입니다...", 30)
+        await asyncio.sleep(1.0)  # 사용자가 볼 수 있도록 잠시 대기
         
         model_name = config.get("model_name", "qwen3:8b")
         timeout = config.get("timeout", 600)
@@ -197,6 +204,7 @@ async def generate_scenario_ws(websocket: WebSocket):
         
         # 4. JSON 파싱
         await send_progress(GenerationStatus.PARSING_RESPONSE, "LLM 응답을 파싱 중입니다...", 80)
+        await asyncio.sleep(1.0)  # 사용자가 볼 수 있도록 잠시 대기
         json_match = re.search(r'<json>(.*?)</json>', raw_response, re.DOTALL)
         if not json_match:
             await send_progress(GenerationStatus.ERROR, "LLM 응답에서 JSON 블록을 찾을 수 없습니다.", 0)
@@ -207,6 +215,7 @@ async def generate_scenario_ws(websocket: WebSocket):
         
         # 5. Excel 파일 생성
         await send_progress(GenerationStatus.GENERATING_EXCEL, "Excel 파일을 생성 중입니다...", 90)
+        await asyncio.sleep(1.0)  # 사용자가 볼 수 있도록 잠시 대기
         # 백엔드에서 실행될 때 절대 경로 사용
         project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
         template_path = os.path.join(project_root, "templates", "template.xlsx")
