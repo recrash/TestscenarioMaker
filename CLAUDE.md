@@ -179,6 +179,18 @@ The original core logic remains in `src/` and is imported by backend routers:
 - Mock external dependencies (Ollama, file system)
 - Database isolation with test fixtures
 
+#### Development Guidelines
+- **CRITICAL**: Only perform the functionality requested by the user. NEVER arbitrarily change variable names or delete existing functionality without explicit request
+- **ALWAYS**: Use test code to verify implemented results and functionality
+- Avoid hardcoding values - use configuration files
+- Follow efficient packaging structure for maintainability
+- Use Chain of Thought approach for complex problem solving
+- Base code changes on the most recent successful implementation
+- Ensure Korean language output for all user-facing content
+- When modifying UI components, always test modal interactions and session state transitions
+- RAG system changes require testing with both enabled/disabled configurations
+- Feedback system modifications should maintain backward compatibility with existing SQLite schema
+
 #### Frontend Testing (Jest)
 - React component testing with Testing Library
 - API service mocking with MSW
