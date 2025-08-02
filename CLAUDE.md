@@ -27,12 +27,15 @@ TestscenarioMaker is an AI-powered tool that analyzes Git repository changes and
 ### Server Management
 ```bash
 # Backend (Port 8000)
-cd backend && python -m uvicorn main:app --reload --port 8000
+python -m uvicorn backend.main:app --reload --port 8000
 
-# Frontend (Port 5173) 
+# Frontend (Port 3000) - Note: Vite runs on port 3000, not 5173
 npm run dev
 
-# DO NOT use ./start-dev.sh
+# Server shutdown
+./stop-dev.sh
+
+# DO NOT use ./start-dev.sh for starting servers
 ```
 
 ### Testing
@@ -42,7 +45,7 @@ npm run test
 npm run test:watch
 npm run test:coverage
 
-# E2E tests (required for testing)
+# E2E tests (MANDATORY for testing functionality)
 npm run test:e2e
 npm run test:e2e:ui
 
@@ -80,7 +83,15 @@ pytest --cov=src --cov-report=html
 ### WebSocket Integration
 - Scenario generation uses WebSocket for real-time progress updates
 - Frontend connects to `ws://localhost:8000/api/scenario/generate-ws`
+- Progress updates show: 10% → 20% → 30% → 80% → 90% → 100%
+- Each step has 1-second delay for user visibility
 - Handle connection states and progress messages appropriately
+
+### Critical WebSocket Implementation Notes
+- Backend uses `progress.model_dump()` + `json.dumps()` for proper serialization
+- Frontend WebSocket URL adapts to environment (localhost:8000 for development)
+- Connection manager prevents duplicate disconnect errors
+- Progress delays ensure user can see each step during generation
 
 ## Code Architecture Details
 
@@ -189,3 +200,20 @@ This project migrated from Streamlit to React+FastAPI. Key changes:
 - Real-time updates via WebSocket instead of Streamlit rerun
 - Improved testing architecture with E2E coverage
 - Enhanced file management and download system
+
+## Common Issues and Solutions
+
+### Frontend Development
+- **Node.js Deprecation Warning**: Fixed with `NODE_OPTIONS="--no-deprecation"` in npm scripts
+- **WebSocket Progress Stuck at 0%**: Fixed with proper serialization and progress delays
+- **Port Configuration**: Frontend runs on port 3000, backend on port 8000
+
+### WebSocket Troubleshooting
+- **Progress Updates Not Visible**: Each step has 1-second delay for user visibility
+- **JSON Serialization Issues**: Use `progress.model_dump()` instead of `progress.json()`
+- **Connection Manager Errors**: Check for duplicate disconnect calls
+
+### Cross-Platform Compatibility
+- Always use relative paths with `pathlib.Path`
+- Never use absolute paths - project must build on Windows
+- Use proper path separators and encoding for Korean filenames
