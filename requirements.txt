@@ -2,7 +2,6 @@
 openpyxl        # .xlsx 파일 읽기/쓰기
 python-docx     # .docx 파일 읽기
 GitPython       # Git 저장소 분석용
-streamlit       # Web UI
 requests        # HTTP 통신
 pandas          # 데이터 처리 및 엑셀 읽기
 

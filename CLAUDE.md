@@ -26,10 +26,10 @@ TestscenarioMaker is an AI-powered tool that analyzes Git repository changes and
 
 ### Server Management
 ```bash
-# Backend (Port 8000)
-python -m uvicorn backend.main:app --reload --port 8000
+# Backend (Port 8000) - Must be run from backend directory
+cd backend && python -m uvicorn main:app --reload --port 8000
 
-# Frontend (Port 3000) - Note: Vite runs on port 3000, not 5173
+# Frontend (Port 3000) - Run from project root
 npm run dev
 
 # Server shutdown
@@ -53,19 +53,27 @@ npm run test:e2e:ui
 npm run test:api
 # OR: pytest tests/api/
 
+# Single test file
+pytest tests/api/test_scenario_api.py -v
+pytest tests/unit/test_git_analyzer.py::test_function_name -v
+
 # All tests
 npm run test:all
 ```
 
-### Building and Linting
+### Building and Environment Setup
 ```bash
 # Frontend build
 npm run build
-npm run lint
 
-# Backend tests only
-pytest
+# Python module imports setup (required for src/ modules)
+export PYTHONPATH=$(pwd):$PYTHONPATH
+
+# Backend tests with coverage
 pytest --cov=src --cov-report=html
+
+# Download Korean embedding model (first-time setup)
+python scripts/download_embedding_model.py
 ```
 
 ## Critical Development Guidelines
@@ -79,6 +87,7 @@ pytest --cov=src --cov-report=html
 - Use `pathlib.Path` and relative paths for cross-platform compatibility
 - Never use absolute paths - the project builds on Windows
 - For backend modules: `Path(__file__).parent.parent` pattern for project root references
+- Module imports require PYTHONPATH setup: `sys.path.append(os.path.join(os.path.dirname(__file__), '..'))`
 
 ### WebSocket Integration
 - Scenario generation uses WebSocket for real-time progress updates
@@ -123,11 +132,15 @@ backend/
 
 ### Legacy Core Modules (src/)
 The original core logic remains in `src/` and is imported by backend routers:
-- **git_analyzer.py**: Git diff extraction and analysis
-- **llm_handler.py**: Ollama LLM integration
+- **git_analyzer.py**: Git diff extraction and analysis using GitPython
+- **llm_handler.py**: Ollama LLM integration (qwen3:1.7b model)
 - **excel_writer.py**: Template-based Excel generation (cross-platform paths)
-- **feedback_manager.py**: SQLite-based feedback storage
+- **feedback_manager.py**: SQLite-based feedback storage with automatic backups
 - **vector_db/**: RAG system with ChromaDB integration
+  - **rag_manager.py**: Main RAG orchestration class
+  - **chroma_manager.py**: ChromaDB vector database operations
+  - **document_chunker.py**: Text chunking for vector storage
+  - **document_indexer.py**: Document processing and indexing
 
 ### API Integration Patterns
 
@@ -149,6 +162,8 @@ The original core logic remains in `src/` and is imported by backend routers:
 - Status monitoring via `/api/rag/status`
 - Context retrieval integrated into scenario generation prompt
 - Uses ko-sroberta-multitask for Korean text embeddings
+- Auto-initializes on backend startup if `rag.enabled: true` in config.json
+- Supports DOCX, TXT, PDF document formats with chunk_size=1000, chunk_overlap=200
 
 ### Testing Architecture
 
@@ -217,3 +232,9 @@ This project migrated from Streamlit to React+FastAPI. Key changes:
 - Always use relative paths with `pathlib.Path`
 - Never use absolute paths - project must build on Windows
 - Use proper path separators and encoding for Korean filenames
+
+### Import Issues and Solutions
+- **Typing imports**: Use `from typing import List, Tuple, Optional` (not `from typing import Tuple` alone)
+- **Module path setup**: Backend uses `sys.path.append(os.path.join(os.path.dirname(__file__), '..'))`
+- **PYTHONPATH environment**: Set `PYTHONPATH=$(pwd):$PYTHONPATH` for direct module testing
+- **Config loading**: RAG system requires config.json with proper `rag.enabled` flag
