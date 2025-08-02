@@ -18,13 +18,22 @@ class TestCase(BaseModel):
     사전조건: str = Field(..., description="테스트 사전조건")
     데이터: str = Field(..., description="테스트 데이터")
     예상결과: str = Field(..., description="예상 결과")
-    종류: str = Field(..., description="테스트 종류")
+    Unit: Optional[str] = Field(None, description="Unit 테스트 플래그")
+    Integration: Optional[str] = Field(None, description="Integration 테스트 플래그")
+
+class ScenarioMetadata(BaseModel):
+    """시나리오 생성 메타데이터"""
+    llm_response_time: float = Field(..., description="LLM 응답 시간")
+    prompt_size: int = Field(..., description="프롬프트 크기")
+    added_chunks: int = Field(..., description="추가된 RAG 청크 수")
+    excel_filename: Optional[str] = Field(None, description="생성된 Excel 파일명")
 
 class ScenarioResponse(BaseModel):
     """시나리오 생성 응답 모델"""
     scenario_description: str = Field(..., alias="Scenario Description", description="시나리오 설명")
     test_scenario_name: str = Field(..., alias="Test Scenario Name", description="테스트 시나리오 이름")
     test_cases: List[TestCase] = Field(..., alias="Test Cases", description="테스트 케이스 목록")
+    metadata: Optional[ScenarioMetadata] = Field(None, description="생성 메타데이터")
 
 class GenerationStatus(str, Enum):
     """생성 상태 열거형"""

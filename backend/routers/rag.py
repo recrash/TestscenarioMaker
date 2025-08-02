@@ -40,6 +40,10 @@ async def index_documents(request: IndexingRequest):
     """문서 인덱싱 API"""
     
     try:
+        # 싱글톤 인스턴스 강제 리셋 (path fix 적용)
+        import src.prompt_loader as pl
+        pl._document_indexer = None
+        
         result = index_documents_folder(force_reindex=request.force_reindex)
         return IndexingResult(**result)
         
@@ -111,4 +115,44 @@ async def get_rag_status():
             "document_count": 0,
             "embedding_model": "Unknown",
             "chunk_size": 0
+        }
+
+@router.get("/debug")
+async def debug_rag_system():
+    """RAG 시스템 디버깅 정보 조회 API"""
+    import os
+    
+    try:
+        from src.config_loader import load_config
+        config = load_config()
+        
+        debug_info = {
+            "working_directory": os.getcwd(),
+            "config_loaded": config is not None,
+            "rag_enabled": config.get('rag', {}).get('enabled', False) if config else False,
+            "documents_folder_config": config.get('documents_folder', 'documents') if config else None,
+        }
+        
+        if config:
+            documents_folder = config.get('documents_folder', 'documents')
+            # 절대 경로로 변환 테스트
+            if not os.path.isabs(documents_folder):
+                current_dir = os.path.dirname(os.path.abspath(__file__))
+                project_root = os.path.dirname(os.path.dirname(current_dir))
+                abs_documents_folder = os.path.join(project_root, documents_folder)
+            else:
+                abs_documents_folder = documents_folder
+                
+            debug_info.update({
+                "documents_folder_absolute": abs_documents_folder,
+                "documents_folder_exists": os.path.exists(abs_documents_folder),
+                "project_root": os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
+            })
+        
+        return debug_info
+        
+    except Exception as e:
+        return {
+            "error": str(e),
+            "working_directory": os.getcwd()
         }

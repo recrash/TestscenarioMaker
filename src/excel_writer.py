@@ -7,8 +7,11 @@ from typing import Dict, List, Any, Optional
 from pathlib import Path
 
 # 상수 정의
-DEFAULT_TEMPLATE_PATH = "templates/template.xlsx"
-OUTPUT_DIR = "outputs"
+# 현재 스크립트 파일 위치를 기준으로 상대경로 설정
+SCRIPT_DIR = Path(__file__).parent
+PROJECT_ROOT = SCRIPT_DIR.parent
+DEFAULT_TEMPLATE_PATH = PROJECT_ROOT / "templates" / "template.xlsx"
+OUTPUT_DIR = PROJECT_ROOT / "outputs"
 FILE_NAME_FORMAT = "{timestamp}_테스트_시나리오_결과.xlsx"
 TIME_FORMAT = "%Y%m%d_%H%M%S"
 NEWLINE_ESCAPE = "\\n"
@@ -33,7 +36,7 @@ def _generate_filename() -> str:
         생성된 파일명
     """
     timestamp = datetime.now().strftime(TIME_FORMAT)
-    return f"{OUTPUT_DIR}/{FILE_NAME_FORMAT.format(timestamp=timestamp)}"
+    return str(OUTPUT_DIR / FILE_NAME_FORMAT.format(timestamp=timestamp))
 
 
 def _copy_template(template_path: str, destination: str) -> bool:
@@ -48,10 +51,17 @@ def _copy_template(template_path: str, destination: str) -> bool:
         복사 성공 여부
     """
     try:
+        # 템플릿 파일 존재 여부 확인
+        template_file = Path(template_path)
+        if not template_file.exists():
+            print(f"오류: 원본 템플릿 파일('{template_path}')을 찾을 수 없습니다.")
+            print(f"현재 확인한 경로: {template_file.absolute()}")
+            return False
+            
         shutil.copy(template_path, destination)
         return True
-    except FileNotFoundError:
-        print(f"오류: 원본 템플릿 파일('{template_path}')을 찾을 수 없습니다.")
+    except Exception as e:
+        print(f"오류: 템플릿 파일 복사 중 오류가 발생했습니다: {e}")
         return False
 
 
@@ -135,7 +145,7 @@ def _fill_test_cases(sheet, test_cases: List[Dict[str, Any]]) -> None:
         sheet[f'G{current_row}'] = integration_flag
 
 
-def save_results_to_excel(result_json: Dict[str, Any], template_path: str = DEFAULT_TEMPLATE_PATH) -> Optional[str]:
+def save_results_to_excel(result_json: Dict[str, Any], template_path: str = None) -> Optional[str]:
     """
     LLM이 생성한 JSON 객체를 파싱하여 엑셀에 저장합니다.
     
@@ -149,6 +159,13 @@ def save_results_to_excel(result_json: Dict[str, Any], template_path: str = DEFA
     print("\n" + "="*50)
     print("최종 단계: 생성된 시나리오를 엑셀 파일에 저장합니다.")
     print("="*50)
+    
+    # 템플릿 경로가 지정되지 않은 경우 기본값 사용
+    if template_path is None:
+        template_path = str(DEFAULT_TEMPLATE_PATH)
+    
+    # outputs 디렉토리가 없으면 생성
+    OUTPUT_DIR.mkdir(exist_ok=True)
     
     final_filename = _generate_filename()
     

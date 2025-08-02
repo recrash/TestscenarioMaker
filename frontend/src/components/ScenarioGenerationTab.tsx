@@ -17,7 +17,7 @@ import {
   Chip,
   Paper
 } from '@mui/material'
-import { ExpandMore, Rocket, Download, Psychology, Speed } from '@mui/icons-material'
+import { ExpandMore, Rocket, Psychology, Speed } from '@mui/icons-material'
 import { scenarioApi, ragApi, filesApi } from '../services/api'
 import { ScenarioWebSocket } from '../utils/websocket'
 import ScenarioResultViewer from './ScenarioResultViewer'
@@ -130,46 +130,6 @@ export default function ScenarioGenerationTab() {
     })
   }
 
-  const handleDownload = async () => {
-    if (result?.metadata?.excel_filename) {
-      try {
-        // 파일 존재 여부 먼저 확인
-        const downloadUrl = filesApi.downloadExcelFile(result.metadata.excel_filename)
-        
-        // fetch로 파일 다운로드 시도
-        const response = await fetch(downloadUrl)
-        
-        if (!response.ok) {
-          throw new Error(`파일 다운로드 실패: ${response.status} ${response.statusText}`)
-        }
-        
-        // Content-Type 확인
-        const contentType = response.headers.get('content-type')
-        if (!contentType?.includes('spreadsheetml') && !contentType?.includes('excel')) {
-          throw new Error('올바른 Excel 파일이 아닙니다.')
-        }
-        
-        // Blob으로 변환하여 다운로드
-        const blob = await response.blob()
-        const url = window.URL.createObjectURL(blob)
-        
-        const link = document.createElement('a')
-        link.href = url
-        link.download = result.metadata.excel_filename
-        document.body.appendChild(link)
-        link.click()
-        document.body.removeChild(link)
-        
-        // 메모리 정리
-        window.URL.revokeObjectURL(url)
-        
-      } catch (error) {
-        console.error('Download failed:', error)
-        const errorMessage = error instanceof Error ? error.message : '알 수 없는 오류'
-        alert(`파일 다운로드 중 오류가 발생했습니다: ${errorMessage}`)
-      }
-    }
-  }
 
   const handleFeedback = (type: 'like' | 'dislike') => {
     setFeedbackType(type)
@@ -292,19 +252,10 @@ export default function ScenarioGenerationTab() {
         <Box>
           <Card sx={{ mb: 3 }}>
             <CardContent>
-              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+              <Box sx={{ mb: 2 }}>
                 <Typography variant="h6" color="success.main">
                   ✅ 테스트 시나리오 생성이 완료되었습니다!
                 </Typography>
-                {result.metadata?.excel_filename && (
-                  <Button
-                    variant="contained"
-                    startIcon={<Download />}
-                    onClick={handleDownload}
-                  >
-                    Excel 파일 다운로드
-                  </Button>
-                )}
               </Box>
 
               {result.metadata && (

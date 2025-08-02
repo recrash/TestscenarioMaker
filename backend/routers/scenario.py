@@ -28,6 +28,7 @@ from src.prompt_loader import (
 from backend.models.scenario import (
     ScenarioGenerationRequest, 
     ScenarioResponse, 
+    ScenarioMetadata,
     GenerationProgress, 
     GenerationStatus
 )
@@ -102,19 +103,24 @@ async def generate_scenario(
         result_json = json.loads(json_string)
         
         # 5. Excel 파일 생성
-        final_filename = save_results_to_excel(result_json)
+        # 백엔드에서 실행될 때 절대 경로 사용
+        project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        template_path = os.path.join(project_root, "templates", "template.xlsx")
+        final_filename = save_results_to_excel(result_json, template_path)
         
         # 응답 데이터 구성
+        metadata = ScenarioMetadata(
+            llm_response_time=end_time - start_time,
+            prompt_size=len(final_prompt),
+            added_chunks=added_chunks,
+            excel_filename=final_filename
+        )
+        
         response_data = {
             "Scenario Description": result_json.get("Scenario Description", ""),
             "Test Scenario Name": result_json.get("Test Scenario Name", ""),
             "Test Cases": result_json.get("Test Cases", []),
-            "metadata": {
-                "llm_response_time": end_time - start_time,
-                "prompt_size": len(final_prompt),
-                "added_chunks": added_chunks,
-                "excel_filename": final_filename
-            }
+            "metadata": metadata
         }
         
         return ScenarioResponse(**response_data)
@@ -201,19 +207,24 @@ async def generate_scenario_ws(websocket: WebSocket):
         
         # 5. Excel 파일 생성
         await send_progress(GenerationStatus.GENERATING_EXCEL, "Excel 파일을 생성 중입니다...", 90)
-        final_filename = save_results_to_excel(result_json)
+        # 백엔드에서 실행될 때 절대 경로 사용
+        project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        template_path = os.path.join(project_root, "templates", "template.xlsx")
+        final_filename = save_results_to_excel(result_json, template_path)
         
         # 완료 - ScenarioResponse 형식에 맞게 변환
+        metadata = ScenarioMetadata(
+            llm_response_time=end_time - start_time,
+            prompt_size=len(final_prompt),
+            added_chunks=added_chunks,
+            excel_filename=final_filename
+        )
+        
         response_data = {
             "scenario_description": result_json.get("Scenario Description", ""),
             "test_scenario_name": result_json.get("Test Scenario Name", ""),
             "test_cases": result_json.get("Test Cases", []),
-            "metadata": {
-                "llm_response_time": end_time - start_time,
-                "prompt_size": len(final_prompt),
-                "added_chunks": added_chunks,
-                "excel_filename": final_filename
-            }
+            "metadata": metadata
         }
         
         await send_progress(
