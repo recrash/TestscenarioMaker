@@ -28,6 +28,7 @@ import type { FeedbackStats } from '../types'
 export default function FeedbackAnalysisTab() {
   const [stats, setStats] = useState<FeedbackStats | null>(null)
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
   const [insights, setInsights] = useState<any>(null)
   const [promptEnhancement, setPromptEnhancement] = useState<any>(null)
   const [examples, setExamples] = useState<{ good: any[], bad: any[] }>({ good: [], bad: [] })
@@ -39,24 +40,68 @@ export default function FeedbackAnalysisTab() {
   const loadAllData = async () => {
     try {
       setLoading(true)
+      setError(null)
       
-      const [statsData, insightsData, enhancementData, goodExamples, badExamples] = await Promise.all([
-        feedbackApi.getStats(),
-        feedbackApi.getInsights(),
-        feedbackApi.getPromptEnhancement(),
-        feedbackApi.getExamples('good', 5),
-        feedbackApi.getExamples('bad', 5)
-      ])
+      // 각 API 호출을 개별적으로 처리하여 일부가 실패해도 다른 데이터는 표시
+      const promises = [
+        feedbackApi.getStats().catch(err => {
+          console.error('Failed to load stats:', err)
+          return null
+        }),
+        feedbackApi.getInsights().catch(err => {
+          console.error('Failed to load insights:', err)
+          return null
+        }),
+        feedbackApi.getPromptEnhancement().catch(err => {
+          console.error('Failed to load prompt enhancement:', err)
+          return null
+        }),
+        feedbackApi.getExamples('good', 5).catch(err => {
+          console.error('Failed to load good examples:', err)
+          return { examples: [] }
+        }),
+        feedbackApi.getExamples('bad', 5).catch(err => {
+          console.error('Failed to load bad examples:', err)
+          return { examples: [] }
+        })
+      ]
 
-      setStats(statsData)
-      setInsights(insightsData)
-      setPromptEnhancement(enhancementData)
+      const [statsData, insightsData, enhancementData, goodExamples, badExamples] = await Promise.all(promises)
+
+      if (statsData) {
+        setStats(statsData)
+      } else {
+        // 기본 통계 데이터 설정
+        setStats({
+          total_feedback: 0,
+          category_distribution: { good: 0, bad: 0, neutral: 0 },
+          average_scores: { overall: 0, usefulness: 0, accuracy: 0, completeness: 0 }
+        })
+      }
+
+      if (insightsData) {
+        setInsights(insightsData)
+      }
+      
+      if (enhancementData) {
+        setPromptEnhancement(enhancementData)
+      }
+      
       setExamples({
-        good: goodExamples.examples || [],
-        bad: badExamples.examples || []
+        good: goodExamples?.examples || [],
+        bad: badExamples?.examples || []
       })
+
     } catch (error) {
       console.error('Failed to load feedback data:', error)
+      setError('데이터를 불러오는 중 오류가 발생했습니다.')
+      
+      // 에러가 발생해도 기본 UI를 표시하기 위한 기본 데이터 설정
+      setStats({
+        total_feedback: 0,
+        category_distribution: { good: 0, bad: 0, neutral: 0 },
+        average_scores: { overall: 0, usefulness: 0, accuracy: 0, completeness: 0 }
+      })
     } finally {
       setLoading(false)
     }
@@ -107,245 +152,251 @@ export default function FeedbackAnalysisTab() {
     )
   }
 
-  if (!stats || stats.total_feedback === 0) {
-    return (
-      <Alert severity="info">
-        아직 수집된 피드백이 없습니다. 시나리오를 생성하고 평가를 남겨주세요!
-      </Alert>
-    )
-  }
-
   return (
     <Box>
       <Typography variant="h5" gutterBottom>
         📊 피드백 분석 대시보드
       </Typography>
 
-      {/* 전체 통계 */}
-      <Grid container spacing={3} sx={{ mb: 3 }}>
-        <Grid item xs={12} sm={6} md={3}>
-          <Paper sx={{ p: 2, textAlign: 'center' }}>
-            <Typography variant="h4" color="primary">
-              {stats.total_feedback}
-            </Typography>
-            <Typography variant="caption" color="text.secondary">
-              총 피드백 수
-            </Typography>
-          </Paper>
-        </Grid>
-        
-        <Grid item xs={12} sm={6} md={3}>
-          <Paper sx={{ p: 2, textAlign: 'center' }}>
-            <Typography variant="h4" color="success.main">
-              {stats.category_distribution.good || 0}
-            </Typography>
-            <Typography variant="caption" color="text.secondary">
-              좋은 예시
-            </Typography>
-            <Typography variant="caption" display="block">
-              ({((stats.category_distribution.good || 0) / stats.total_feedback * 100).toFixed(1)}%)
-            </Typography>
-          </Paper>
-        </Grid>
-        
-        <Grid item xs={12} sm={6} md={3}>
-          <Paper sx={{ p: 2, textAlign: 'center' }}>
-            <Typography variant="h4" color="error.main">
-              {stats.category_distribution.bad || 0}
-            </Typography>
-            <Typography variant="caption" color="text.secondary">
-              개선 필요
-            </Typography>
-            <Typography variant="caption" display="block">
-              ({((stats.category_distribution.bad || 0) / stats.total_feedback * 100).toFixed(1)}%)
-            </Typography>
-          </Paper>
-        </Grid>
-        
-        <Grid item xs={12} sm={6} md={3}>
-          <Paper sx={{ p: 2, textAlign: 'center' }}>
-            <Typography variant="h4" color="primary">
-              {stats.average_scores.overall?.toFixed(1) || '0.0'}
-            </Typography>
-            <Typography variant="caption" color="text.secondary">
-              평균 만족도 (/5.0)
-            </Typography>
-          </Paper>
-        </Grid>
-      </Grid>
-
-      {/* 상세 점수 분석 */}
-      <Card sx={{ mb: 3 }}>
-        <CardContent>
-          <Typography variant="h6" gutterBottom>
-            📈 상세 점수 분석
-          </Typography>
-          <Grid container spacing={2}>
-            {Object.entries(stats.average_scores).map(([key, score]) => {
-              const labels: { [key: string]: string } = {
-                overall: '전체 만족도',
-                usefulness: '유용성',
-                accuracy: '정확성',
-                completeness: '완성도'
-              }
-              
-              return (
-                <Grid item xs={12} sm={6} md={3} key={key}>
-                  <Box sx={{ textAlign: 'center', p: 2, bgcolor: 'grey.50', borderRadius: 1 }}>
-                    <Typography variant="h6">
-                      {(score as number).toFixed(1)}/5.0
-                    </Typography>
-                    <Typography variant="caption">
-                      {labels[key] || key}
-                    </Typography>
-                  </Box>
-                </Grid>
-              )
-            })}
-          </Grid>
-        </CardContent>
-      </Card>
-
-      {/* 프롬프트 개선 현황 */}
-      {promptEnhancement && (
-        <Card sx={{ mb: 3 }}>
-          <CardContent>
-            <Typography variant="h6" gutterBottom>
-              🔧 프롬프트 개선 현황
-            </Typography>
-            <Grid container spacing={2}>
-              <Grid item xs={12} md={4}>
-                <Box sx={{ textAlign: 'center', p: 2, bgcolor: 'grey.50', borderRadius: 1 }}>
-                  <Typography variant="subtitle1">
-                    {promptEnhancement.is_active ? '활성화' : '대기 중'}
-                  </Typography>
-                  <Typography variant="caption">
-                    개선 적용 상태
-                  </Typography>
-                  <Typography variant="caption" display="block">
-                    ({promptEnhancement.enhancement_summary.feedback_count}/3 피드백)
-                  </Typography>
-                </Box>
-              </Grid>
-              <Grid item xs={12} md={4}>
-                <Box sx={{ textAlign: 'center', p: 2, bgcolor: 'grey.50', borderRadius: 1 }}>
-                  <Typography variant="subtitle1">
-                    {promptEnhancement.enhancement_summary.improvement_areas?.length || 0}개
-                  </Typography>
-                  <Typography variant="caption">
-                    개선 필요 영역
-                  </Typography>
-                </Box>
-              </Grid>
-              <Grid item xs={12} md={4}>
-                <Box sx={{ textAlign: 'center', p: 2, bgcolor: 'grey.50', borderRadius: 1 }}>
-                  <Typography variant="subtitle1">
-                    {(promptEnhancement.enhancement_summary.good_examples_available || 0) + 
-                     (promptEnhancement.enhancement_summary.bad_examples_available || 0)}개
-                  </Typography>
-                  <Typography variant="caption">
-                    사용 가능한 예시
-                  </Typography>
-                </Box>
-              </Grid>
-            </Grid>
-
-            {promptEnhancement.is_active ? (
-              <Alert severity="success" sx={{ mt: 2 }}>
-                ✅ 피드백 기반 프롬프트 개선이 활성화되어 있습니다.
-              </Alert>
-            ) : (
-              <Alert severity="info" sx={{ mt: 2 }}>
-                💡 {3 - promptEnhancement.enhancement_summary.feedback_count}개의 추가 피드백이 필요합니다. 
-                피드백이 충분히 수집되면 자동으로 프롬프트 개선이 활성화됩니다.
-              </Alert>
-            )}
-          </CardContent>
-        </Card>
+      {error && (
+        <Alert severity="error" sx={{ mb: 2 }}>
+          {error}
+        </Alert>
       )}
 
-      {/* 예시 모음 */}
-      <Grid container spacing={3} sx={{ mb: 3 }}>
-        <Grid item xs={12} md={6}>
-          <Card>
-            <CardContent>
-              <Typography variant="h6" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                <TrendingUp color="success" />
-                좋은 예시 (최근 5개)
-              </Typography>
-              
-              {examples.good.length === 0 ? (
-                <Typography variant="body2" color="text.secondary">
-                  좋은 예시가 없습니다.
+      {!stats || stats.total_feedback === 0 ? (
+        <Alert severity="info">
+          아직 수집된 피드백이 없습니다. 시나리오를 생성하고 평가를 남겨주세요!
+        </Alert>
+      ) : (
+        <>
+          {/* 전체 통계 */}
+          <Grid container spacing={3} sx={{ mb: 3 }}>
+            <Grid item xs={12} sm={6} md={3}>
+              <Paper sx={{ p: 2, textAlign: 'center' }}>
+                <Typography variant="h4" color="primary">
+                  {stats.total_feedback}
                 </Typography>
-              ) : (
-                examples.good.map((example, index) => (
-                  <Accordion key={index}>
-                    <AccordionSummary expandIcon={<ExpandMore />}>
-                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                        <Chip label={`${example.overall_score}/5`} color="success" size="small" />
-                        <Typography variant="body2">
-                          {example.timestamp?.slice(0, 10)}
-                        </Typography>
-                      </Box>
-                    </AccordionSummary>
-                    <AccordionDetails>
-                      <Typography variant="subtitle2">
-                        시나리오 제목: {example.scenario_content?.test_scenario_name || 'N/A'}
-                      </Typography>
-                      {example.comments && (
-                        <Typography variant="body2" sx={{ mt: 1 }}>
-                          의견: {example.comments}
-                        </Typography>
-                      )}
-                    </AccordionDetails>
-                  </Accordion>
-                ))
-              )}
-            </CardContent>
-          </Card>
-        </Grid>
+                <Typography variant="caption" color="text.secondary">
+                  총 피드백 수
+                </Typography>
+              </Paper>
+            </Grid>
+            
+            <Grid item xs={12} sm={6} md={3}>
+              <Paper sx={{ p: 2, textAlign: 'center' }}>
+                <Typography variant="h4" color="success.main">
+                  {stats.category_distribution.good || 0}
+                </Typography>
+                <Typography variant="caption" color="text.secondary">
+                  좋은 예시
+                </Typography>
+                <Typography variant="caption" display="block">
+                  ({((stats.category_distribution.good || 0) / stats.total_feedback * 100).toFixed(1)}%)
+                </Typography>
+              </Paper>
+            </Grid>
+            
+            <Grid item xs={12} sm={6} md={3}>
+              <Paper sx={{ p: 2, textAlign: 'center' }}>
+                <Typography variant="h4" color="error.main">
+                  {stats.category_distribution.bad || 0}
+                </Typography>
+                <Typography variant="caption" color="text.secondary">
+                  개선 필요
+                </Typography>
+                <Typography variant="caption" display="block">
+                  ({((stats.category_distribution.bad || 0) / stats.total_feedback * 100).toFixed(1)}%)
+                </Typography>
+              </Paper>
+            </Grid>
+            
+            <Grid item xs={12} sm={6} md={3}>
+              <Paper sx={{ p: 2, textAlign: 'center' }}>
+                <Typography variant="h4" color="primary">
+                  {stats.average_scores.overall?.toFixed(1) || '0.0'}
+                </Typography>
+                <Typography variant="caption" color="text.secondary">
+                  평균 만족도 (/5.0)
+                </Typography>
+              </Paper>
+            </Grid>
+          </Grid>
 
-        <Grid item xs={12} md={6}>
-          <Card>
+          {/* 상세 점수 분석 */}
+          <Card sx={{ mb: 3 }}>
             <CardContent>
-              <Typography variant="h6" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                <TrendingDown color="error" />
-                개선 필요 예시 (최근 5개)
+              <Typography variant="h6" gutterBottom>
+                📈 상세 점수 분석
               </Typography>
-              
-              {examples.bad.length === 0 ? (
-                <Typography variant="body2" color="text.secondary">
-                  개선 필요 예시가 없습니다.
-                </Typography>
-              ) : (
-                examples.bad.map((example, index) => (
-                  <Accordion key={index}>
-                    <AccordionSummary expandIcon={<ExpandMore />}>
-                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                        <Chip label={`${example.overall_score}/5`} color="error" size="small" />
-                        <Typography variant="body2">
-                          {example.timestamp?.slice(0, 10)}
+              <Grid container spacing={2}>
+                {Object.entries(stats.average_scores).map(([key, score]) => {
+                  const labels: { [key: string]: string } = {
+                    overall: '전체 만족도',
+                    usefulness: '유용성',
+                    accuracy: '정확성',
+                    completeness: '완성도'
+                  }
+                  
+                  return (
+                    <Grid item xs={12} sm={6} md={3} key={key}>
+                      <Box sx={{ textAlign: 'center', p: 2, bgcolor: 'grey.50', borderRadius: 1 }}>
+                        <Typography variant="h6">
+                          {(score as number).toFixed(1)}/5.0
+                        </Typography>
+                        <Typography variant="caption">
+                          {labels[key] || key}
                         </Typography>
                       </Box>
-                    </AccordionSummary>
-                    <AccordionDetails>
-                      <Typography variant="subtitle2">
-                        시나리오 제목: {example.scenario_content?.test_scenario_name || 'N/A'}
-                      </Typography>
-                      {example.comments && (
-                        <Typography variant="body2" sx={{ mt: 1 }}>
-                          개선 의견: {example.comments}
-                        </Typography>
-                      )}
-                    </AccordionDetails>
-                  </Accordion>
-                ))
-              )}
+                    </Grid>
+                  )
+                })}
+              </Grid>
             </CardContent>
           </Card>
-        </Grid>
-      </Grid>
+
+          {/* 프롬프트 개선 현황 */}
+          {promptEnhancement && (
+            <Card sx={{ mb: 3 }}>
+              <CardContent>
+                <Typography variant="h6" gutterBottom>
+                  🔧 프롬프트 개선 현황
+                </Typography>
+                <Grid container spacing={2}>
+                  <Grid item xs={12} md={4}>
+                    <Box sx={{ textAlign: 'center', p: 2, bgcolor: 'grey.50', borderRadius: 1 }}>
+                      <Typography variant="subtitle1">
+                        {promptEnhancement.is_active ? '활성화' : '대기 중'}
+                      </Typography>
+                      <Typography variant="caption">
+                        개선 적용 상태
+                      </Typography>
+                      <Typography variant="caption" display="block">
+                        ({promptEnhancement.enhancement_summary?.feedback_count || 0}/3 피드백)
+                      </Typography>
+                    </Box>
+                  </Grid>
+                  <Grid item xs={12} md={4}>
+                    <Box sx={{ textAlign: 'center', p: 2, bgcolor: 'grey.50', borderRadius: 1 }}>
+                      <Typography variant="subtitle1">
+                        {promptEnhancement.enhancement_summary?.improvement_areas?.length || 0}개
+                      </Typography>
+                      <Typography variant="caption">
+                        개선 필요 영역
+                      </Typography>
+                    </Box>
+                  </Grid>
+                  <Grid item xs={12} md={4}>
+                    <Box sx={{ textAlign: 'center', p: 2, bgcolor: 'grey.50', borderRadius: 1 }}>
+                      <Typography variant="subtitle1">
+                        {((promptEnhancement.enhancement_summary?.good_examples_available || 0) + 
+                         (promptEnhancement.enhancement_summary?.bad_examples_available || 0))}개
+                      </Typography>
+                      <Typography variant="caption">
+                        사용 가능한 예시
+                      </Typography>
+                    </Box>
+                  </Grid>
+                </Grid>
+
+                {promptEnhancement.is_active ? (
+                  <Alert severity="success" sx={{ mt: 2 }}>
+                    ✅ 피드백 기반 프롬프트 개선이 활성화되어 있습니다.
+                  </Alert>
+                ) : (
+                  <Alert severity="info" sx={{ mt: 2 }}>
+                    💡 {3 - (promptEnhancement.enhancement_summary?.feedback_count || 0)}개의 추가 피드백이 필요합니다. 
+                    피드백이 충분히 수집되면 자동으로 프롬프트 개선이 활성화됩니다.
+                  </Alert>
+                )}
+              </CardContent>
+            </Card>
+          )}
+
+          {/* 예시 모음 */}
+          <Grid container spacing={3} sx={{ mb: 3 }}>
+            <Grid item xs={12} md={6}>
+              <Card>
+                <CardContent>
+                  <Typography variant="h6" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                    <TrendingUp color="success" />
+                    좋은 예시 (최근 5개)
+                  </Typography>
+                  
+                  {examples.good.length === 0 ? (
+                    <Typography variant="body2" color="text.secondary">
+                      좋은 예시가 없습니다.
+                    </Typography>
+                  ) : (
+                    examples.good.map((example, index) => (
+                      <Accordion key={index}>
+                        <AccordionSummary expandIcon={<ExpandMore />}>
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                            <Chip label={`${example.overall_score}/5`} color="success" size="small" />
+                            <Typography variant="body2">
+                              {example.timestamp?.slice(0, 10)}
+                            </Typography>
+                          </Box>
+                        </AccordionSummary>
+                        <AccordionDetails>
+                          <Typography variant="subtitle2">
+                            시나리오 제목: {example.scenario_content?.test_scenario_name || 'N/A'}
+                          </Typography>
+                          {example.comments && (
+                            <Typography variant="body2" sx={{ mt: 1 }}>
+                              의견: {example.comments}
+                            </Typography>
+                          )}
+                        </AccordionDetails>
+                      </Accordion>
+                    ))
+                  )}
+                </CardContent>
+              </Card>
+            </Grid>
+
+            <Grid item xs={12} md={6}>
+              <Card>
+                <CardContent>
+                  <Typography variant="h6" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                    <TrendingDown color="error" />
+                    개선 필요 예시 (최근 5개)
+                  </Typography>
+                  
+                  {examples.bad.length === 0 ? (
+                    <Typography variant="body2" color="text.secondary">
+                      개선 필요 예시가 없습니다.
+                    </Typography>
+                  ) : (
+                    examples.bad.map((example, index) => (
+                      <Accordion key={index}>
+                        <AccordionSummary expandIcon={<ExpandMore />}>
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                            <Chip label={`${example.overall_score}/5`} color="error" size="small" />
+                            <Typography variant="body2">
+                              {example.timestamp?.slice(0, 10)}
+                            </Typography>
+                          </Box>
+                        </AccordionSummary>
+                        <AccordionDetails>
+                          <Typography variant="subtitle2">
+                            시나리오 제목: {example.scenario_content?.test_scenario_name || 'N/A'}
+                          </Typography>
+                          {example.comments && (
+                            <Typography variant="body2" sx={{ mt: 1 }}>
+                              개선 의견: {example.comments}
+                            </Typography>
+                          )}
+                        </AccordionDetails>
+                      </Accordion>
+                    ))
+                  )}
+                </CardContent>
+              </Card>
+            </Grid>
+          </Grid>
+        </>
+      )}
 
       {/* 데이터 관리 */}
       <Card>
