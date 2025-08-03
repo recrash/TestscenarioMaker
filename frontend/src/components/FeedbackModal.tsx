@@ -19,6 +19,7 @@ import {
 import { ExpandMore, Send, Cancel } from '@mui/icons-material'
 import { feedbackApi } from '../services/api'
 import type { ScenarioResponse, TestCaseFeedback } from '../types'
+import logger from '../utils/logger'
 
 interface FeedbackModalProps {
   open: boolean
@@ -50,6 +51,8 @@ export default function FeedbackModal({
 
   React.useEffect(() => {
     if (open) {
+      logger.info(`피드백 모달 열림: type=${feedbackType}, test_cases_count=${result.test_cases.length}`)
+      
       // 모달이 열릴 때 테스트케이스 피드백 초기화
       const initialFeedback = result.test_cases.slice(0, 5).map(testCase => ({
         testcase_id: testCase.ID,
@@ -59,10 +62,14 @@ export default function FeedbackModal({
       setTestcaseFeedback(initialFeedback)
       setComments('')
       setShowSuccess(false)
+      
+      logger.debug(`테스트케이스 피드백 초기화: count=${initialFeedback.length}`)
     }
-  }, [open, result.test_cases])
+  }, [open, result.test_cases, feedbackType])
 
   const handleTestcaseRatingChange = (index: number, score: number) => {
+    logger.debug(`테스트케이스 평가 변경: index=${index}, score=${score}, label=${ratingLabels[score]}`)
+    
     setTestcaseFeedback(prev => 
       prev.map((item, i) => 
         i === index ? { ...item, score } : item
@@ -71,6 +78,8 @@ export default function FeedbackModal({
   }
 
   const handleTestcaseCommentChange = (index: number, comment: string) => {
+    logger.debug(`테스트케이스 코멘트 변경: index=${index}, comment_length=${comment.length}`)
+    
     setTestcaseFeedback(prev => 
       prev.map((item, i) => 
         i === index ? { ...item, comments: comment } : item
@@ -79,6 +88,8 @@ export default function FeedbackModal({
   }
 
   const handleSubmit = async () => {
+    logger.info(`피드백 제출 시작: type=${feedbackType}, comments_length=${comments.length}`)
+    
     try {
       setIsSubmitting(true)
 
@@ -91,9 +102,14 @@ export default function FeedbackModal({
         scenario_content: result
       }
 
+      logger.debug(`피드백 요청 데이터: testcase_feedback_count=${feedbackRequest.testcase_feedback.length}`)
+
       await feedbackApi.submit(feedbackRequest)
+      
+      logger.info(`피드백 제출 성공: type=${feedbackType}`)
       setShowSuccess(true)
     } catch (error) {
+      logger.error(`피드백 제출 실패: type=${feedbackType}, error=${error}`)
       console.error('Failed to submit feedback:', error)
       alert('피드백 제출 중 오류가 발생했습니다.')
     } finally {
@@ -102,6 +118,8 @@ export default function FeedbackModal({
   }
 
   const handleClose = () => {
+    logger.info(`피드백 모달 닫힘: type=${feedbackType}`)
+    
     setComments('')
     setTestcaseFeedback([])
     setShowSuccess(false)
@@ -166,7 +184,10 @@ export default function FeedbackModal({
           multiline
           rows={4}
           value={comments}
-          onChange={(e) => setComments(e.target.value)}
+          onChange={(e) => {
+            logger.debug(`전체 코멘트 변경: length=${e.target.value.length}`)
+            setComments(e.target.value)
+          }}
           placeholder={
             feedbackType === 'like'
               ? '예: 시나리오가 구체적이고 실용적이었습니다.'
