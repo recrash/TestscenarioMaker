@@ -32,6 +32,7 @@ export class ScenarioWebSocket {
       this.ws.onmessage = (event) => {
         try {
           const data = JSON.parse(event.data);
+          logger.info('WebSocket message received:', data);
           
           if (data.status === 'error') {
             logger.error('WebSocket message error:', new Error(data.message), data);
@@ -41,7 +42,9 @@ export class ScenarioWebSocket {
 
           if (data.status === 'completed') {
             logger.info('Scenario generation completed.', data.details?.result);
-            this.onCompleteCallback(data.details?.result || data);
+            const result = data.details?.result || data;
+            logger.info('Calling onCompleteCallback with result:', result);
+            this.onCompleteCallback(result);
             return;
           }
 

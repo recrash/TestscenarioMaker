@@ -98,6 +98,29 @@ export const feedbackApi = {
   resetCache: async () => {
     const response = await api.post('/feedback/cache/reset');
     return response.data;
+  },
+
+  // 새로운 백업 파일 관리 API
+  listBackupFiles: async () => {
+    const response = await api.get('/feedback/backup-files');
+    return response.data;
+  },
+
+  deleteBackupFile: async (filename: string) => {
+    const response = await api.delete(`/feedback/backup-files/${encodeURIComponent(filename)}`);
+    return response.data;
+  },
+
+  downloadBackupFile: async (filename: string) => {
+    const response = await api.get(`/feedback/backup-files/${encodeURIComponent(filename)}/download`, {
+      responseType: 'blob'
+    });
+    return response;
+  },
+
+  generateSummaryReport: async () => {
+    const response = await api.post('/feedback/summary-report');
+    return response.data;
   }
 };
 

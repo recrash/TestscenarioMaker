@@ -2,11 +2,15 @@
 피드백 관련 API 라우터
 """
 
-from fastapi import APIRouter, HTTPException
-from fastapi.responses import JSONResponse
+from fastapi import APIRouter, HTTPException, Path
+from fastapi.responses import JSONResponse, FileResponse
 import os
 import sys
 import logging
+import json
+from pathlib import Path as PathlibPath
+from datetime import datetime
+from typing import List, Dict, Any
 
 # 기존 모듈 import
 sys.path.append(os.path.join(os.path.dirname(__file__), '../..'))
@@ -175,11 +179,80 @@ async def export_feedback_data():
     logger.info("피드백 데이터 내보내기 요청")
     
     try:
-        # 피드백 데이터 내보내기 로직
-        export_data = feedback_manager.export_feedback_data()
+        import sqlite3
         
-        logger.info(f"피드백 데이터 내보내기 성공: record_count={len(export_data.get('records', []))}")
-        return export_data
+        # 피드백 데이터 직접 조회하여 반환
+        with sqlite3.connect(feedback_manager.db_path) as conn:
+            cursor = conn.cursor()
+            
+            # 모든 피드백 데이터 조회
+            cursor.execute('''
+                SELECT sf.*, GROUP_CONCAT(tf.testcase_id || ':' || tf.score || ':' || COALESCE(tf.comments, ''), '|') as testcase_data
+                FROM scenario_feedback sf
+                LEFT JOIN testcase_feedback tf ON sf.scenario_id = tf.scenario_id
+                GROUP BY sf.scenario_id
+            ''')
+            
+            results = cursor.fetchall()
+            export_data = []
+            
+            for row in results:
+                feedback_item = {
+                    'scenario_id': row[1],
+                    'timestamp': row[2],
+                    'git_analysis_hash': row[3],
+                    'repo_path': row[4],
+                    'scenario_content': json.loads(row[5]),
+                    'overall_score': row[6],
+                    'usefulness_score': row[7],
+                    'accuracy_score': row[8],
+                    'completeness_score': row[9],
+                    'category': row[10],
+                    'comments': row[11],
+                    'created_at': row[12]
+                }
+                
+                # 테스트케이스 피드백 파싱
+                if row[13]:  # testcase_data
+                    testcase_feedback = []
+                    for testcase_item in row[13].split('|'):
+                        if testcase_item.strip():
+                            parts = testcase_item.split(':')
+                            if len(parts) >= 2:
+                                testcase_feedback.append({
+                                    'testcase_id': parts[0],
+                                    'score': int(parts[1]),
+                                    'comments': parts[2] if len(parts) > 2 else ''
+                                })
+                    feedback_item['testcase_feedback'] = testcase_feedback
+                else:
+                    feedback_item['testcase_feedback'] = []
+                
+                export_data.append(feedback_item)
+        
+        # 파일로도 저장
+        from datetime import datetime
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        filename = f"feedback_export_{timestamp}.json"
+        
+        # 루트 디렉토리의 backups 폴더 사용
+        backups_dir = PathlibPath("../backups")
+        backups_dir.mkdir(exist_ok=True)
+        
+        with open(backups_dir / filename, 'w', encoding='utf-8') as f:
+            json.dump({
+                'exported_at': datetime.now().isoformat(),
+                'total_records': len(export_data),
+                'records': export_data
+            }, f, ensure_ascii=False, indent=2)
+        
+        logger.info(f"피드백 데이터 내보내기 성공: record_count={len(export_data)}")
+        return {
+            'message': '데이터가 성공적으로 내보내졌습니다.',
+            'filename': filename,
+            'total_records': len(export_data),
+            'exported_at': datetime.now().isoformat()
+        }
         
     except Exception as e:
         logger.error(f"피드백 데이터 내보내기 실패: error={str(e)}")
@@ -254,3 +327,148 @@ async def reset_feedback_cache():
     except Exception as e:
         logger.error(f"피드백 캐시 초기화 실패: error={str(e)}")
         raise HTTPException(status_code=500, detail=f"피드백 캐시 초기화 중 오류가 발생했습니다: {str(e)}")
+
+# 새로운 API 엔드포인트들
+
+@router.get("/backup-files")
+async def list_backup_files():
+    """백업 파일 목록 조회 API"""
+    
+    logger.info("백업 파일 목록 조회 요청")
+    
+    try:
+        # 백업 폴더 경로 (루트 디렉토리)
+        backup_dir = PathlibPath("../backups")
+        
+        if not backup_dir.exists():
+            logger.warning("백업 폴더가 존재하지 않습니다.")
+            return {"files": []}
+        
+        backup_files = []
+        for file_path in backup_dir.glob("feedback_*.json"):
+            try:
+                stat = file_path.stat()
+                backup_files.append({
+                    "filename": file_path.name,
+                    "size": stat.st_size,
+                    "created_at": datetime.fromtimestamp(stat.st_ctime).isoformat(),
+                    "modified_at": datetime.fromtimestamp(stat.st_mtime).isoformat()
+                })
+            except Exception as file_error:
+                logger.warning(f"백업 파일 정보 읽기 실패: {file_path.name}, error={str(file_error)}")
+                continue
+        
+        # 수정 시간 기준 내림차순 정렬 (최신 파일 먼저)
+        backup_files.sort(key=lambda x: x["modified_at"], reverse=True)
+        
+        logger.info(f"백업 파일 목록 조회 성공: file_count={len(backup_files)}")
+        return {"files": backup_files}
+        
+    except Exception as e:
+        logger.error(f"백업 파일 목록 조회 실패: error={str(e)}")
+        raise HTTPException(status_code=500, detail=f"백업 파일 목록 조회 중 오류가 발생했습니다: {str(e)}")
+
+@router.delete("/backup-files/{filename}")
+async def delete_backup_file(filename: str = Path(..., description="삭제할 백업 파일명")):
+    """백업 파일 삭제 API"""
+    
+    logger.info(f"백업 파일 삭제 요청: filename={filename}")
+    
+    try:
+        # 파일명 검증 (보안 체크)
+        if not filename.startswith("feedback_") or not filename.endswith(".json"):
+            raise HTTPException(status_code=400, detail="유효하지 않은 백업 파일명입니다.")
+        
+        # 백업 파일 경로 (루트 디렉토리)
+        backup_file = PathlibPath("../backups") / filename
+        
+        if not backup_file.exists():
+            raise HTTPException(status_code=404, detail="백업 파일을 찾을 수 없습니다.")
+        
+        # 파일 삭제
+        backup_file.unlink()
+        
+        logger.info(f"백업 파일 삭제 성공: filename={filename}")
+        return {"message": f"백업 파일 '{filename}'이 성공적으로 삭제되었습니다.", "success": True}
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"백업 파일 삭제 실패: filename={filename}, error={str(e)}")
+        raise HTTPException(status_code=500, detail=f"백업 파일 삭제 중 오류가 발생했습니다: {str(e)}")
+
+@router.get("/backup-files/{filename}/download")
+async def download_backup_file(filename: str = Path(..., description="다운로드할 백업 파일명")):
+    """백업 파일 다운로드 API"""
+    
+    logger.info(f"백업 파일 다운로드 요청: filename={filename}")
+    
+    try:
+        # 파일명 검증 (보안 체크)
+        if not filename.startswith("feedback_") or not filename.endswith(".json"):
+            raise HTTPException(status_code=400, detail="유효하지 않은 백업 파일명입니다.")
+        
+        # 백업 파일 경로 (루트 디렉토리)
+        backup_file = PathlibPath("../backups") / filename
+        
+        if not backup_file.exists():
+            raise HTTPException(status_code=404, detail="백업 파일을 찾을 수 없습니다.")
+        
+        logger.info(f"백업 파일 다운로드 성공: filename={filename}")
+        return FileResponse(
+            path=str(backup_file),
+            filename=filename,
+            media_type="application/json"
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"백업 파일 다운로드 실패: filename={filename}, error={str(e)}")
+        raise HTTPException(status_code=500, detail=f"백업 파일 다운로드 중 오류가 발생했습니다: {str(e)}")
+
+@router.post("/summary-report")
+async def generate_summary_report():
+    """피드백 요약 보고서 생성 API"""
+    
+    logger.info("피드백 요약 보고서 생성 요청")
+    
+    try:
+        # 통계 데이터 수집
+        stats = feedback_manager.get_feedback_stats()
+        insights = feedback_manager.get_improvement_insights()
+        
+        # 요약 보고서 데이터 구성
+        report_data = {
+            "generated_at": datetime.now().isoformat(),
+            "summary": {
+                "total_feedback": stats.get("total_feedback", 0),
+                "category_distribution": stats.get("category_distribution", {}),
+                "average_scores": stats.get("average_scores", {})
+            },
+            "insights": {
+                "negative_feedback_count": insights.get("negative_feedback_count", 0),
+                "common_issues": insights.get("common_issues", []),
+                "improvement_suggestions": insights.get("improvement_suggestions", [])
+            },
+            "report_metadata": {
+                "report_type": "feedback_summary",
+                "report_version": "1.0",
+                "data_period": "전체 기간"
+            }
+        }
+        
+        # 보고서 파일명 생성
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        report_filename = f"feedback_summary_report_{timestamp}.json"
+        
+        logger.info(f"피드백 요약 보고서 생성 성공: total_feedback={stats.get('total_feedback', 0)}")
+        return {
+            "report_data": report_data,
+            "filename": report_filename,
+            "success": True
+        }
+        
+    except Exception as e:
+        logger.error(f"피드백 요약 보고서 생성 실패: error={str(e)}")
+        raise HTTPException(status_code=500, detail=f"요약 보고서 생성 중 오류가 발생했습니다: {str(e)}")
