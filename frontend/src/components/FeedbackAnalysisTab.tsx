@@ -20,10 +20,13 @@ import {
   Delete,
   Analytics,
   TrendingUp,
-  TrendingDown
+  TrendingDown,
+  FolderOpen,
+  Assessment
 } from '@mui/icons-material'
 import { feedbackApi } from '../services/api'
 import type { FeedbackStats } from '../types'
+import BackupFileManagementModal from './BackupFileManagementModal'
 
 export default function FeedbackAnalysisTab() {
   const [stats, setStats] = useState<FeedbackStats | null>(null)
@@ -32,6 +35,7 @@ export default function FeedbackAnalysisTab() {
   const [insights, setInsights] = useState<any>(null)
   const [promptEnhancement, setPromptEnhancement] = useState<any>(null)
   const [examples, setExamples] = useState<{ good: any[], bad: any[] }>({ good: [], bad: [] })
+  const [backupModalOpen, setBackupModalOpen] = useState(false)
 
   useEffect(() => {
     loadAllData()
@@ -141,6 +145,34 @@ export default function FeedbackAnalysisTab() {
     } catch (error) {
       console.error('Failed to reset feedback:', error)
       alert('피드백 삭제 중 오류가 발생했습니다.')
+    }
+  }
+
+  const handleBackupManagement = () => {
+    setBackupModalOpen(true)
+  }
+
+  const handleGenerateReport = async () => {
+    try {
+      const response = await feedbackApi.generateSummaryReport()
+      
+      // JSON 파일로 다운로드
+      const blob = new Blob([JSON.stringify(response.report_data, null, 2)], {
+        type: 'application/json'
+      })
+      const url = window.URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = response.filename
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+      window.URL.revokeObjectURL(url)
+      
+      alert('요약 보고서가 성공적으로 생성되었습니다.')
+    } catch (error) {
+      console.error('Failed to generate summary report:', error)
+      alert('요약 보고서 생성 중 오류가 발생했습니다.')
     }
   }
 
@@ -405,66 +437,118 @@ export default function FeedbackAnalysisTab() {
             💾 데이터 관리
           </Typography>
           
-          <Grid container spacing={2}>
-            <Grid item xs={12} md={6}>
-              <Button
-                fullWidth
-                variant="outlined"
-                startIcon={<Download />}
-                onClick={handleExportData}
-              >
-                피드백 데이터 내보내기
-              </Button>
+          {/* 안전한 작업 - 데이터 백업 및 관리 */}
+          <Box sx={{ mb: 3 }}>
+            <Typography variant="subtitle2" gutterBottom sx={{ color: 'text.secondary' }}>
+              데이터 백업 및 관리
+            </Typography>
+            <Grid container spacing={2} justifyContent="center">
+              <Grid item xs={12} sm={4}>
+                <Button
+                  fullWidth
+                  variant="outlined"
+                  startIcon={<Download />}
+                  onClick={handleExportData}
+                  sx={{ py: 1.5 }}
+                >
+                  📥 피드백 데이터 내보내기
+                </Button>
+              </Grid>
+              
+              <Grid item xs={12} sm={4}>
+                <Button
+                  fullWidth
+                  variant="outlined"
+                  startIcon={<FolderOpen />}
+                  onClick={handleBackupManagement}
+                  sx={{ py: 1.5 }}
+                >
+                  📋 백업 파일 관리
+                </Button>
+              </Grid>
+              
+              <Grid item xs={12} sm={4}>
+                <Button
+                  fullWidth
+                  variant="outlined"
+                  startIcon={<Assessment />}
+                  onClick={handleGenerateReport}
+                  sx={{ py: 1.5 }}
+                >
+                  📊 요약 보고서
+                </Button>
+              </Grid>
             </Grid>
+          </Box>
+          
+          {/* 위험한 작업 - 데이터 삭제 */}
+          <Paper 
+            variant="outlined" 
+            sx={{ 
+              p: 2, 
+              backgroundColor: 'error.light', 
+              borderColor: 'error.main',
+              borderWidth: 1
+            }}
+          >
+            <Typography variant="subtitle2" gutterBottom sx={{ color: 'error.dark', fontWeight: 'bold' }}>
+              ⚠️ 데이터 삭제 (주의 필요)
+            </Typography>
             
-            <Grid item xs={12} md={6}>
-              <Button
-                fullWidth
-                variant="outlined"
-                color="error"
-                startIcon={<Delete />}
-                onClick={() => handleResetFeedback('all')}
-              >
-                전체 피드백 삭제
-              </Button>
+            <Grid container spacing={2}>
+              <Grid item xs={12} sm={6} md={3}>
+                <Button
+                  fullWidth
+                  variant="outlined"
+                  color="error"
+                  startIcon={<Delete />}
+                  onClick={() => handleResetFeedback('all')}
+                  sx={{ backgroundColor: 'white', '&:hover': { backgroundColor: 'error.light' } }}
+                >
+                  전체 피드백 삭제
+                </Button>
+              </Grid>
+              
+              <Grid item xs={12} sm={6} md={3}>
+                <Button
+                  fullWidth
+                  variant="outlined"
+                  color="success"
+                  startIcon={<Delete />}
+                  onClick={() => handleResetFeedback('good')}
+                  sx={{ backgroundColor: 'white', '&:hover': { backgroundColor: 'success.light' } }}
+                >
+                  긍정 피드백 삭제
+                </Button>
+              </Grid>
+              
+              <Grid item xs={12} sm={6} md={3}>
+                <Button
+                  fullWidth
+                  variant="outlined"
+                  color="warning"
+                  startIcon={<Delete />}
+                  onClick={() => handleResetFeedback('bad')}
+                  sx={{ backgroundColor: 'white', '&:hover': { backgroundColor: 'warning.light' } }}
+                >
+                  부정 피드백 삭제
+                </Button>
+              </Grid>
+              
+              <Grid item xs={12} sm={6} md={3}>
+                <Button
+                  fullWidth
+                  variant="outlined"
+                  color="info"
+                  startIcon={<Delete />}
+                  onClick={() => handleResetFeedback('neutral')}
+                  sx={{ backgroundColor: 'white', '&:hover': { backgroundColor: 'info.light' } }}
+                >
+                  중립 피드백 삭제
+                </Button>
+              </Grid>
             </Grid>
-            
-            <Grid item xs={12} md={3}>
-              <Button
-                fullWidth
-                variant="outlined"
-                color="success"
-                startIcon={<Delete />}
-                onClick={() => handleResetFeedback('good')}
-              >
-                긍정 피드백 삭제
-              </Button>
-            </Grid>
-            
-            <Grid item xs={12} md={3}>
-              <Button
-                fullWidth
-                variant="outlined"
-                color="warning"
-                startIcon={<Delete />}
-                onClick={() => handleResetFeedback('bad')}
-              >
-                부정 피드백 삭제
-              </Button>
-            </Grid>
-            
-            <Grid item xs={12} md={3}>
-              <Button
-                fullWidth
-                variant="outlined"
-                color="info"
-                startIcon={<Delete />}
-                onClick={() => handleResetFeedback('neutral')}
-              >
-                중립 피드백 삭제
-              </Button>
-            </Grid>
-          </Grid>
+          </Paper>
 
           <Alert severity="warning" sx={{ mt: 2 }}>
             ⚠️ 초기화 작업은 되돌릴 수 없습니다. 초기화 전 자동으로 백업이 생성됩니다.
@@ -472,6 +556,12 @@ export default function FeedbackAnalysisTab() {
           </Alert>
         </CardContent>
       </Card>
+
+      {/* 백업 파일 관리 모달 */}
+      <BackupFileManagementModal 
+        open={backupModalOpen} 
+        onClose={() => setBackupModalOpen(false)} 
+      />
     </Box>
   )
 }
