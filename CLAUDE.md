@@ -72,6 +72,9 @@ export PYTHONPATH=$(pwd):$PYTHONPATH
 # Backend tests with coverage
 pytest --cov=src --cov-report=html
 
+# Linting (frontend)
+npm run lint
+
 # Download Korean embedding model (first-time setup for offline environments)
 python scripts/download_embedding_model.py
 
@@ -177,6 +180,8 @@ The original core logic remains in `src/` and is imported by backend routers:
 - Test complete user workflows including file downloads
 - Verify WebSocket real-time updates
 - Cross-browser compatibility testing
+- Playwright config auto-starts both frontend (port 3000) and backend (port 8000) servers
+- Test scenario generation requires ~60 second wait time for completion
 
 #### API Testing (pytest)
 - Located in `tests/api/`
@@ -293,6 +298,12 @@ For closed networks, pre-download the Korean embedding model:
 python scripts/download_embedding_model.py
 ```
 This script downloads the Korean embedding model (~500MB) to `./models/ko-sroberta-multitask/` for offline use.
+
+### Dependencies and Package Management
+- **Frontend dependencies**: Managed via npm, defined in package.json
+- **Backend dependencies**: Managed via pip, defined in requirements.txt
+- **Python dependencies include**: FastAPI, ChromaDB, sentence-transformers, pytest, GitPython
+- **Key frontend libraries**: React 18, TypeScript, Material-UI, Vite, Playwright
 
 ## Recent System Enhancements
 
