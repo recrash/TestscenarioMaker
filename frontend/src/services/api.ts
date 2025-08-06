@@ -53,6 +53,55 @@ export const scenarioApi = {
   }
 };
 
+// V2 API 함수들 추가
+export const scenarioApiV2 = {
+  // 새 클라이언트 생성
+  createClient: async (): Promise<{
+    client_id: string;
+    websocket_url: string;
+    generate_url: string;
+    status_url: string;
+  }> => {
+    logger.info('Creating new client for v2 API');
+    const response = await api.post('/v2/client');
+    logger.info('Client created:', response.data);
+    return response.data;
+  },
+
+  // 클라이언트 상태 조회
+  getClientStatus: async (clientId: string) => {
+    logger.info(`Getting client status: ${clientId}`);
+    const response = await api.get(`/v2/status/${clientId}`);
+    return response.data;
+  },
+
+  // v2 WebSocket URL 생성
+  getWebSocketUrlV2: (clientId: string): string => {
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const host = window.location.hostname;
+    const port = import.meta.env.VITE_API_PORT || '8000';
+    const url = `${protocol}//${host}:${port}/api/v2/ws/progress/${clientId}`;
+    
+    logger.info(`Generated v2 WebSocket URL: ${url}`);
+    return url;
+  },
+
+  // testscenariomaker:// URL 호출
+  triggerCLI: (clientId: string, repoPath: string, performanceMode: boolean = true): void => {
+    const params = new URLSearchParams({
+      client_id: clientId,
+      repo_path: repoPath,
+      use_performance_mode: performanceMode.toString()
+    });
+    
+    const url = `testscenariomaker://generate?${params.toString()}`;
+    logger.info(`Triggering CLI with URL: ${url}`);
+    
+    // 브라우저에서 custom protocol 호출
+    window.location.href = url;
+  }
+};
+
 // Feedback API
 export const feedbackApi = {
   submit: async (request: FeedbackRequest) => {

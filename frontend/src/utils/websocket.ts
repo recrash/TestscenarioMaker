@@ -84,3 +84,126 @@ export class ScenarioWebSocket {
     return this.ws?.readyState === WebSocket.OPEN;
   }
 }
+
+/**
+ * v2 WebSocket 클래스 - clientId 기반 연결
+ */
+export class ScenarioWebSocketV2 {
+  private ws: WebSocket | null = null;
+  private url: string;
+  private clientId: string;
+  private onProgressCallback: (progress: any) => void;
+  private onErrorCallback: (message: string) => void;
+  private onCompleteCallback: (result: any) => void;
+  private reconnectAttempts = 0;
+  private maxReconnectAttempts = 5;
+  private reconnectDelay = 2000;
+
+  constructor(
+    clientId: string,
+    wsUrl: string,
+    onProgress: (progress: any) => void,
+    onError: (message: string) => void,
+    onComplete: (result: any) => void
+  ) {
+    this.clientId = clientId;
+    this.url = wsUrl;
+    this.onProgressCallback = onProgress;
+    this.onErrorCallback = onError;
+    this.onCompleteCallback = onComplete;
+  }
+
+  connect(): void {
+    try {
+      logger.info(`Connecting to v2 WebSocket: ${this.url}`);
+      this.ws = new WebSocket(this.url);
+
+      this.ws.onopen = (event) => {
+        logger.info('v2 WebSocket connected', { url: this.url, clientId: this.clientId });
+        this.reconnectAttempts = 0; // 연결 성공 시 재연결 시도 횟수 리셋
+      };
+
+      this.ws.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          logger.info('v2 WebSocket message received:', data);
+
+          // pong 메시지는 무시
+          if (data.type === 'pong') {
+            return;
+          }
+
+          // 진행 상황 처리
+          if (data.status) {
+            this.onProgressCallback(data);
+
+            // 완료 또는 오류 상태 처리
+            if (data.status === 'completed' && data.details?.result) {
+              this.onCompleteCallback(data.details.result);
+            } else if (data.status === 'error') {
+              this.onErrorCallback(data.message || 'Unknown error occurred');
+            }
+          } else {
+            logger.warning('Unexpected v2 WebSocket message format:', data);
+          }
+        } catch (error) {
+          logger.error('Error parsing v2 WebSocket message:', error as Error);
+          this.onErrorCallback('메시지 파싱 중 오류가 발생했습니다.');
+        }
+      };
+
+      this.ws.onerror = (event) => {
+        logger.error('v2 WebSocket error:', undefined, { event, clientId: this.clientId });
+        this.onErrorCallback('WebSocket 연결 오류가 발생했습니다.');
+      };
+
+      this.ws.onclose = (event) => {
+        logger.info('v2 WebSocket closed:', { code: event.code, reason: event.reason, clientId: this.clientId });
+        
+        // 정상적인 종료가 아닌 경우 재연결 시도
+        if (event.code !== 1000 && this.reconnectAttempts < this.maxReconnectAttempts) {
+          this.attemptReconnect();
+        }
+      };
+
+    } catch (error) {
+      logger.error('Error creating v2 WebSocket:', error as Error);
+      this.onErrorCallback('WebSocket 생성 중 오류가 발생했습니다.');
+    }
+  }
+
+  private attemptReconnect(): void {
+    this.reconnectAttempts++;
+    logger.info(`Attempting v2 WebSocket reconnection ${this.reconnectAttempts}/${this.maxReconnectAttempts}`);
+
+    setTimeout(() => {
+      this.connect();
+    }, this.reconnectDelay * this.reconnectAttempts); // 지수적 백오프
+  }
+
+  sendPing(): void {
+    if (this.isConnected()) {
+      try {
+        this.ws?.send(JSON.stringify({ type: 'ping', timestamp: Date.now() }));
+      } catch (error) {
+        logger.error('Error sending ping:', error as Error);
+      }
+    }
+  }
+
+  disconnect(): void {
+    logger.info('Disconnecting v2 WebSocket.');
+    if (this.ws) {
+      this.ws.close(1000, 'Client disconnect');
+      this.ws = null;
+    }
+  }
+
+  isConnected(): boolean {
+    return this.ws?.readyState === WebSocket.OPEN;
+  }
+
+  getClientId(): string {
+    return this.clientId;
+  }
+}

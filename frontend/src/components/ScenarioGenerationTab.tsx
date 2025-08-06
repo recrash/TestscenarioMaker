@@ -18,8 +18,9 @@ import {
   Paper
 } from '@mui/material'
 import { ExpandMore, Rocket, Psychology, Speed } from '@mui/icons-material'
-import { scenarioApi, ragApi, filesApi } from '../services/api'
-import { ScenarioWebSocket } from '../utils/websocket'
+import { scenarioApi, scenarioApiV2, ragApi, filesApi } from '../services/api'
+// v2 WebSocket 사용
+import { ScenarioWebSocketV2 } from '../utils/websocket'
 import ScenarioResultViewer from './ScenarioResultViewer'
 import FeedbackModal from './FeedbackModal'
 import RAGSystemPanel from './RAGSystemPanel'
@@ -37,23 +38,27 @@ export default function ScenarioGenerationTab() {
   const [feedbackType, setFeedbackType] = useState<'like' | 'dislike'>('like')
   const [config, setConfig] = useState<any>(null)
 
-  // WebSocket 인스턴스
-  const [websocket, setWebsocket] = useState<ScenarioWebSocket | null>(null)
+  // v2 API 상태 관리
+  const [clientId, setClientId] = useState<string | null>(null)
+  const [websocketV2, setWebsocketV2] = useState<ScenarioWebSocketV2 | null>(null)
+  const [connectionStatus, setConnectionStatus] = useState<'disconnected' | 'connecting' | 'connected' | 'error'>('disconnected')
 
   useEffect(() => {
     // 컴포넌트 마운트 시 설정과 RAG 상태 로드
     loadConfig()
     loadRagStatus()
+    // v2 클라이언트 초기화
+    initializeV2Client()
   }, [])
 
   useEffect(() => {
     // 컴포넌트 언마운트 시 WebSocket 정리
     return () => {
-      if (websocket) {
-        websocket.disconnect()
+      if (websocketV2) {
+        websocketV2.disconnect()
       }
     }
-  }, [websocket])
+  }, [websocketV2])
 
   const loadConfig = async () => {
     try {
@@ -76,6 +81,20 @@ export default function ScenarioGenerationTab() {
     }
   }
 
+  const initializeV2Client = async () => {
+    try {
+      setConnectionStatus('connecting')
+      const clientData = await scenarioApiV2.createClient()
+      setClientId(clientData.client_id)
+      setConnectionStatus('connected')
+      console.log('🎯 v2 클라이언트 생성 완료:', clientData.client_id)
+    } catch (error) {
+      console.error('Failed to initialize v2 client:', error)
+      setError('v2 클라이언트 초기화에 실패했습니다.')
+      setConnectionStatus('error')
+    }
+  }
+
   const validateRepoPath = async (path: string) => {
     if (!path.trim()) return false
     
@@ -87,7 +106,12 @@ export default function ScenarioGenerationTab() {
     }
   }
 
-  const handleGenerate = async () => {
+  const handleGenerateV2 = async () => {
+    if (!clientId) {
+      setError('클라이언트가 초기화되지 않았습니다. 페이지를 새로고침 해주세요.')
+      return
+    }
+
     if (!repoPath.trim()) {
       setError('Git 저장소 경로를 입력해주세요.')
       return
@@ -99,38 +123,61 @@ export default function ScenarioGenerationTab() {
       return
     }
 
+    // 상태 초기화
     setError(null)
     setResult(null)
     setIsGenerating(true)
-    setProgress({ status: GenerationStatus.STARTED, message: '시나리오 생성을 시작합니다...', progress: 0 })
-
-    // WebSocket 연결
-    const wsUrl = scenarioApi.getWebSocketUrl()
-    const ws = new ScenarioWebSocket(
-      wsUrl,
-      (progressData) => {
-        setProgress(progressData)
-      },
-      (errorMessage) => {
-        setError(errorMessage)
-        setIsGenerating(false)
-        setProgress(null)
-      },
-      (resultData) => {
-        console.log('🎉 시나리오 생성 완료! 결과:', resultData)
-        setResult(resultData)
-        setIsGenerating(false)
-        setProgress(null)
-      }
-    )
-
-    setWebsocket(ws)
-    ws.connect({
-      repo_path: repoPath,
-      use_performance_mode: performanceMode
+    setProgress({ 
+      status: GenerationStatus.STARTED, 
+      message: 'v2 시나리오 생성을 시작합니다...', 
+      progress: 0 
     })
-  }
 
+    try {
+      // v2 WebSocket 연결 설정
+      const wsUrl = scenarioApiV2.getWebSocketUrlV2(clientId)
+      const ws = new ScenarioWebSocketV2(
+        clientId,
+        wsUrl,
+        (progressData) => {
+          console.log('📊 v2 진행상황 업데이트:', progressData)
+          setProgress(progressData)
+          
+          // 예상치 못한 상태 처리
+          if (!Object.values(GenerationStatus).includes(progressData.status)) {
+            console.warn('⚠️ 예상치 못한 상태값:', progressData.status)
+            setError(`예상치 못한 상태가 수신되었습니다: ${progressData.status}`)
+          }
+        },
+        (errorMessage) => {
+          console.error('❌ v2 WebSocket 오류:', errorMessage)
+          setError(errorMessage)
+          setIsGenerating(false)
+          setProgress(null)
+        },
+        (resultData) => {
+          console.log('🎉 v2 시나리오 생성 완료! 결과:', resultData)
+          setResult(resultData)
+          setIsGenerating(false)
+          setProgress(null)
+        }
+      )
+
+      setWebsocketV2(ws)
+      ws.connect()
+
+      // 잠시 대기 후 CLI 트리거 (WebSocket 연결 안정화)
+      setTimeout(() => {
+        scenarioApiV2.triggerCLI(clientId, repoPath, performanceMode)
+      }, 1000)
+
+    } catch (error) {
+      console.error('v2 생성 프로세스 오류:', error)
+      setError('시나리오 생성 중 오류가 발생했습니다.')
+      setIsGenerating(false)
+      setProgress(null)
+    }
+  }
 
   const handleFeedback = (type: 'like' | 'dislike') => {
     setFeedbackType(type)
@@ -144,10 +191,41 @@ export default function ScenarioGenerationTab() {
     return 'primary'
   }
 
+  const getConnectionStatusChip = () => {
+    const statusConfig = {
+      disconnected: { label: '연결 해제', color: 'default' as const },
+      connecting: { label: '연결 중...', color: 'warning' as const },
+      connected: { label: '연결됨', color: 'success' as const },
+      error: { label: '연결 실패', color: 'error' as const }
+    }
+    
+    const config = statusConfig[connectionStatus]
+    return (
+      <Chip 
+        label={config.label} 
+        color={config.color} 
+        size="small"
+        sx={{ ml: 2 }}
+      />
+    )
+  }
+
   return (
     <Box>
       {/* RAG 시스템 정보 */}
       <RAGSystemPanel ragStatus={ragStatus} onStatusUpdate={loadRagStatus} />
+
+      {/* v2 API 연결 상태 표시 */}
+      <Card sx={{ mb: 2, backgroundColor: 'rgba(33, 150, 243, 0.04)' }}>
+        <CardContent sx={{ py: 2 }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <Typography variant="body2" color="text.secondary">
+              🚀 v2 API 상태 {clientId && `(Client ID: ${clientId})`}
+            </Typography>
+            {getConnectionStatusChip()}
+          </Box>
+        </CardContent>
+      </Card>
 
       {/* 입력 폼 */}
       <Card 
@@ -172,8 +250,14 @@ export default function ScenarioGenerationTab() {
           <Box sx={{ display: 'flex', alignItems: 'center', mb: 3 }}>
             <Rocket sx={{ mr: 2, color: 'primary.main', fontSize: 28 }} />
             <Typography variant="h5" fontWeight={700} color="primary.main">
-              시나리오 생성 설정
+              시나리오 생성 설정 (v2)
             </Typography>
+            <Chip 
+              label="CLI 연동" 
+              color="primary" 
+              size="small" 
+              sx={{ ml: 2, fontWeight: 600 }}
+            />
           </Box>
           
           <TextField
@@ -182,7 +266,7 @@ export default function ScenarioGenerationTab() {
             value={repoPath}
             onChange={(e) => setRepoPath(e.target.value)}
             placeholder="/path/to/your/git/repository"
-            disabled={isGenerating}
+            disabled={isGenerating || connectionStatus !== 'connected'}
             sx={{ 
               mb: 3,
               '& .MuiOutlinedInput-root': {
@@ -192,7 +276,11 @@ export default function ScenarioGenerationTab() {
                 }
               }
             }}
-            helperText="분석할 Git 저장소의 로컬 경로를 입력하세요"
+            helperText={
+              connectionStatus !== 'connected' 
+                ? "v2 API 연결이 필요합니다" 
+                : "분석할 Git 저장소의 로컬 경로를 입력하세요"
+            }
           />
 
           <Box 
@@ -209,7 +297,7 @@ export default function ScenarioGenerationTab() {
                 <Checkbox
                   checked={performanceMode}
                   onChange={(e) => setPerformanceMode(e.target.checked)}
-                  disabled={isGenerating}
+                  disabled={isGenerating || connectionStatus !== 'connected'}
                   sx={{
                     '& .MuiSvgIcon-root': {
                       fontSize: 24
@@ -244,15 +332,15 @@ export default function ScenarioGenerationTab() {
           <Button
             variant="contained"
             size="large"
-            onClick={handleGenerate}
-            disabled={isGenerating}
+            onClick={handleGenerateV2}
+            disabled={isGenerating || connectionStatus !== 'connected'}
             startIcon={<Rocket />}
             fullWidth
             sx={{
               py: 2,
               fontSize: '1.1rem',
               fontWeight: 700,
-              background: isGenerating 
+              background: isGenerating || connectionStatus !== 'connected'
                 ? 'linear-gradient(45deg, #bdbdbd 30%, #9e9e9e 90%)' 
                 : 'linear-gradient(45deg, #2196f3 30%, #1976d2 90%)',
               boxShadow: '0 6px 20px rgba(33, 150, 243, 0.3)',
@@ -267,7 +355,17 @@ export default function ScenarioGenerationTab() {
               }
             }}
           >
-            {isGenerating ? '생성 중...' : '테스트 시나리오 생성하기'}
+            {isGenerating ? '생성 중... (CLI 연동)' : 'v2 테스트 시나리오 생성하기'}
+          </Button>
+
+          {/* 비활성화된 v1 버튼 (참고용) */}
+          <Button
+            variant="outlined"
+            size="small"
+            disabled={true}
+            sx={{ mt: 1, width: '100%', opacity: 0.5 }}
+          >
+            ⚠️ v1 API (비활성화됨)
           </Button>
         </CardContent>
       </Card>
@@ -277,8 +375,12 @@ export default function ScenarioGenerationTab() {
         <Card 
           sx={{ 
             mb: 4,
-            background: 'linear-gradient(135deg, #e3f2fd 0%, #ffffff 100%)',
-            border: '2px solid rgba(33, 150, 243, 0.2)',
+            background: progress.status === 'error' 
+              ? 'linear-gradient(135deg, #ffebee 0%, #ffffff 100%)'
+              : 'linear-gradient(135deg, #e3f2fd 0%, #ffffff 100%)',
+            border: progress.status === 'error' 
+              ? '2px solid rgba(244, 67, 54, 0.2)'
+              : '2px solid rgba(33, 150, 243, 0.2)',
             position: 'relative',
             overflow: 'hidden'
           }}
@@ -290,32 +392,38 @@ export default function ScenarioGenerationTab() {
                   width: 48, 
                   height: 48, 
                   borderRadius: '50%', 
-                  background: 'linear-gradient(45deg, #2196f3 30%, #1976d2 90%)',
+                  background: progress.status === 'error' 
+                    ? 'linear-gradient(45deg, #f44336 30%, #d32f2f 90%)'
+                    : 'linear-gradient(45deg, #2196f3 30%, #1976d2 90%)',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
                   mr: 2,
-                  boxShadow: '0 4px 12px rgba(33, 150, 243, 0.3)'
+                  boxShadow: progress.status === 'error' 
+                    ? '0 4px 12px rgba(244, 67, 54, 0.3)'
+                    : '0 4px 12px rgba(33, 150, 243, 0.3)'
                 }}
               >
                 <Psychology sx={{ color: 'white', fontSize: 24 }} />
               </Box>
               <Box sx={{ flexGrow: 1 }}>
-                <Typography variant="h5" fontWeight={700} color="primary.main">
-                  생성 진행 상황
+                <Typography variant="h5" fontWeight={700} color={progress.status === 'error' ? 'error.main' : 'primary.main'}>
+                  {progress.status === 'error' ? '오류 발생' : 'v2 생성 진행 상황'}
                 </Typography>
                 <Typography variant="body1" color="text.secondary" sx={{ mt: 0.5 }}>
                   {progress.message}
                 </Typography>
               </Box>
               <Chip
-                label={`${progress.progress.toFixed(0)}%`}
-                color="primary"
+                label={progress.status === 'error' ? 'ERROR' : `${progress.progress.toFixed(0)}%`}
+                color={progress.status === 'error' ? 'error' : 'primary'}
                 sx={{
                   fontSize: '1rem',
                   fontWeight: 700,
                   height: 40,
-                  background: 'linear-gradient(45deg, #2196f3 30%, #1976d2 90%)'
+                  background: progress.status === 'error' 
+                    ? 'linear-gradient(45deg, #f44336 30%, #d32f2f 90%)'
+                    : 'linear-gradient(45deg, #2196f3 30%, #1976d2 90%)'
                 }}
               />
             </Box>
@@ -323,15 +431,19 @@ export default function ScenarioGenerationTab() {
             <Box sx={{ mb: 2 }}>
               <LinearProgress
                 variant="determinate"
-                value={progress.progress}
+                value={progress.status === 'error' ? 0 : progress.progress}
                 color={getProgressColor()}
                 sx={{ 
                   height: 12,
                   borderRadius: 6,
-                  backgroundColor: 'rgba(33, 150, 243, 0.1)',
+                  backgroundColor: progress.status === 'error' 
+                    ? 'rgba(244, 67, 54, 0.1)'
+                    : 'rgba(33, 150, 243, 0.1)',
                   '& .MuiLinearProgress-bar': {
                     borderRadius: 6,
-                    background: 'linear-gradient(90deg, #2196f3 0%, #1976d2 100%)'
+                    background: progress.status === 'error' 
+                      ? 'linear-gradient(90deg, #f44336 0%, #d32f2f 100%)'
+                      : 'linear-gradient(90deg, #2196f3 0%, #1976d2 100%)'
                   }
                 }}
               />
@@ -381,7 +493,17 @@ export default function ScenarioGenerationTab() {
 
       {/* 오류 표시 */}
       {error && (
-        <Alert severity="error" sx={{ mb: 3 }}>
+        <Alert 
+          severity="error" 
+          sx={{ mb: 3 }}
+          action={
+            connectionStatus === 'error' && (
+              <Button color="inherit" size="small" onClick={initializeV2Client}>
+                재연결
+              </Button>
+            )
+          }
+        >
           {error}
         </Alert>
       )}
@@ -415,9 +537,14 @@ export default function ScenarioGenerationTab() {
                 >
                   <Typography sx={{ fontSize: '2rem' }}>✅</Typography>
                 </Box>
-                <Typography variant="h4" fontWeight={700} color="success.main">
-                  테스트 시나리오 생성 완료!
-                </Typography>
+                <Box>
+                  <Typography variant="h4" fontWeight={700} color="success.main">
+                    v2 테스트 시나리오 생성 완료!
+                  </Typography>
+                  <Typography variant="body1" color="text.secondary" sx={{ mt: 0.5 }}>
+                    CLI 연동을 통해 생성되었습니다
+                  </Typography>
+                </Box>
               </Box>
 
               {result.metadata && (
