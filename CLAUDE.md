@@ -48,6 +48,7 @@ npm run test:coverage
 # E2E tests (MANDATORY for testing functionality)
 npm run test:e2e
 npm run test:e2e:ui
+npm run test:e2e:report
 
 # Backend API tests
 npm run test:api
@@ -57,8 +58,11 @@ npm run test:api
 pytest tests/api/test_scenario_api.py -v
 pytest tests/unit/test_git_analyzer.py::test_function_name -v
 
-# All tests
+# All tests (comprehensive test suite)
 npm run test:all
+
+# Backend tests with coverage reporting
+pytest --cov=src --cov-report=html --cov-report=term
 ```
 
 ### Building and Environment Setup
@@ -88,6 +92,7 @@ curl http://localhost:8000/api/health
 - **명확한 명령이나 지시가 있기 전까지는 기존에 있는 기능을 삭제하지 말아라** (Never delete existing functionality without explicit instructions)
 - **Cross-platform compatibility**: Use relative paths only - this project must build on Windows
 - **E2E testing mandatory**: Always perform E2E tests using Playwright MCP when testing functionality
+- **CLI Integration**: This is a CLI tool designed for command-line operation and deployment automation
 
 ### Path Management
 - Use `pathlib.Path` and relative paths for cross-platform compatibility
@@ -299,6 +304,17 @@ python scripts/download_embedding_model.py
 ```
 This script downloads the Korean embedding model (~500MB) to `./models/ko-sroberta-multitask/` for offline use.
 
+### Deployment and Production
+```bash
+# Production build process
+npm run build
+cd backend && python -m uvicorn main:app --host 0.0.0.0 --port 8000
+
+# Environment setup for production
+export PYTHONPATH=$(pwd):$PYTHONPATH
+export NODE_OPTIONS="--no-deprecation"
+```
+
 ### Dependencies and Package Management
 - **Frontend dependencies**: Managed via npm, defined in package.json
 - **Backend dependencies**: Managed via pip, defined in requirements.txt
@@ -321,3 +337,31 @@ The feedback analysis interface has been enhanced with:
 - **Path security**: Filename validation to prevent directory traversal attacks
 - **File operations**: Proper MIME types and UTF-8 encoding for Korean filenames
 - **Backup system integration**: Automated backup creation with manual management capabilities
+
+## Logging and Monitoring System
+
+### Structured Logging Architecture
+- **Centralized logging**: All logs stored in `logs/` directory with date-based filenames
+- **Dual logging streams**: Separate frontend and backend log files (`YYYYMMDD_frontend.log`, `YYYYMMDD_backend.log`)
+- **Log levels**: DEBUG, INFO, WARNING, ERROR with appropriate filtering
+- **Request tracking**: WebSocket connections and API calls tracked with unique identifiers
+- **Performance monitoring**: Response times and resource usage logged for optimization
+
+### Log Management
+```bash
+# View real-time logs
+tail -f logs/$(date +%Y%m%d)_backend.log
+tail -f logs/$(date +%Y%m%d)_frontend.log
+
+# Log rotation and cleanup managed automatically
+# Logs retained for 30 days by default
+```
+
+## CLI Integration Features
+
+### Command-Line Workflow Support
+- **Automated testing**: All test suites can be run from CLI for CI/CD integration
+- **Health check endpoints**: `/api/health` for monitoring and deployment validation
+- **Configuration management**: JSON-based config with environment variable support
+- **Process management**: Proper server lifecycle management with graceful shutdown
+- **Deployment readiness**: Production-ready configuration with proper error handling
