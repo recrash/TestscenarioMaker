@@ -262,6 +262,7 @@ test_outputs/
 # 캐시 파일
 .cache/
 cache/
+indexed_files_cache.json
 
 # 임시 파일
 temp/
